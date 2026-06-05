@@ -8,7 +8,7 @@ from aiohttp import web
 import comfy.utils
 
 # Custom API route to serve video files from anywhere on the user's system for the frontend preview
-@PromptServer.instance.routes.get("/video_ui_custom_view")
+@PromptServer.instance.routes.get("/df_video_ui_custom_view")
 async def custom_view(request):
     file_path = request.query.get("filename", "")
     if os.path.exists(file_path) and os.path.isfile(file_path):
@@ -16,7 +16,7 @@ async def custom_view(request):
     return web.Response(status=404, text="File not found")
 
 # Custom API route for Chunked Uploads to bypass the 413 Payload Too Large error
-@PromptServer.instance.routes.post("/video_ui_upload_chunk")
+@PromptServer.instance.routes.post("/df_video_ui_upload_chunk")
 async def upload_chunk(request):
     post = await request.post()
     file = post.get("file")
@@ -64,7 +64,7 @@ class LoadVideoUI:
     RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT", "INT")
     RETURN_NAMES = ("images", "audio", "duration", "frame_count")
     FUNCTION = "load_video"
-    CATEGORY = "CS-WhatDreamsCost"
+    CATEGORY = "DF-WhatDreamsCost"
 
     def load_video(self, video, frame_rate, display_mode, start_time, end_time, duration, start_frame, end_frame, duration_frames, custom_width=0, custom_height=0, resize_method="maintain aspect ratio", crop_x=0.0, crop_y=0.0, crop_w=1.0, crop_h=1.0, **kwargs):
         if not video:

@@ -247,6 +247,21 @@ def _to_str(value):
     return "" if value is None else str(value)
 
 
+def _to_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = _to_str(value).strip().lower()
+    if text in {"true", "1", "yes", "y", "on", "\u662f", "\u5f00", "\u542f\u7528"}:
+        return True
+    if text in {"false", "0", "no", "n", "off", "\u5426", "\u5173", "\u7981\u7528"}:
+        return False
+    return default
+
+
 def _largest_remainder_lengths(weights, total_frames: int, count: int):
     if count <= 0:
         return []
@@ -376,15 +391,40 @@ def _empty_audio_latent(audio_vae, ltxv_length: int, frame_rate: float):
     return {"samples": audio_latents, "type": "audio"}
 
 
+def _maybe_split_single_six_grid_storyboard(
+    storyboard_images,
+    segment_count,
+    auto_crop_borders=True,
+    border_sensitivity=0.10,
+    border_crop_px=8,
+    grid_layout="auto",
+):
+    if storyboard_images is None:
+        return storyboard_images
+    if int(storyboard_images.shape[0]) != 1 or int(segment_count) <= 1:
+        return storyboard_images
+
+    from .ltx_sixgrid_director import _split_single_six_grid_image
+
+    return _split_single_six_grid_image(
+        storyboard_images,
+        int(segment_count),
+        auto_crop_borders=auto_crop_borders,
+        border_sensitivity=border_sensitivity,
+        border_crop_px=border_crop_px,
+        grid_layout=grid_layout,
+    )
+
+
 class LTXAutoDirector(io.ComfyNode):
     """Automatic storyboard-to-LTX director node for batch images and LLM shot text."""
 
     @classmethod
     def define_schema(cls):
         return io.Schema(
-            node_id="CS-LTXAutoDirector",
-            display_name="CS-LTX \u81ea\u52a8\u5bfc\u6f14\u53f0",
-            category="CS-WhatDreamsCost",
+            node_id="DF-LTXAutoDirector",
+            display_name="DF-LTX \u81ea\u52a8\u5bfc\u6f14\u53f0",
+            category="DF-WhatDreamsCost",
             description=(
                 "Builds an LTX Director timeline automatically from a batch of storyboard images "
                 "and an LLM response containing per-shot prompts."
@@ -405,6 +445,17 @@ class LTXAutoDirector(io.ComfyNode):
                 io.Float.Input("epsilon", display_name="\u5206\u6bb5\u8fb9\u754c\u9510\u5ea6", default=0.001, min=0.0001, max=0.99, step=0.0001, tooltip="Prompt Relay boundary sharpness."),
                 io.Float.Input("frame_rate", display_name="\u5e27\u7387", default=24, min=1, max=240, step=1, tooltip="Frames per second."),
                 io.Combo.Input("parse_mode", display_name="\u6587\u672c\u89e3\u6790\u65b9\u5f0f", options=["auto", "json", "numbered_text"], default="auto", tooltip="How to parse llm_response."),
+                io.Combo.Input(
+                    "grid_layout",
+                    display_name="\u516d\u5bab\u683c\u5e03\u5c40",
+                    options=["\u81ea\u52a8\u68c0\u6d4b", "2\u5217 x 3\u884c", "3\u5217 x 2\u884c"],
+                    default="\u81ea\u52a8\u68c0\u6d4b",
+                    optional=True,
+                    tooltip="Used only when storyboard_images contains one combined six-grid image.",
+                ),
+                io.Boolean.Input("auto_crop_borders", display_name="\u81ea\u52a8\u88c1\u6389\u516d\u5bab\u683c\u8fb9\u6846", default=True, optional=True),
+                io.Float.Input("border_sensitivity", display_name="\u8fb9\u6846\u68c0\u6d4b\u7075\u654f\u5ea6", default=0.10, min=0.01, max=0.45, step=0.01, optional=True),
+                io.Int.Input("border_crop_px", display_name="\u5206\u9694\u7ebf\u5b89\u5168\u88c1\u526a\u50cf\u7d20", default=8, min=0, max=128, step=1, optional=True),
                 io.Int.Input("custom_width", display_name="\u8f93\u51fa\u5bbd\u5ea6", default=0, min=0, max=8192, step=1, optional=True, tooltip="Target image/video width. 0 keeps source-derived width."),
                 io.Int.Input("custom_height", display_name="\u8f93\u51fa\u9ad8\u5ea6", default=0, min=0, max=8192, step=1, optional=True, tooltip="Target image/video height. 0 keeps source-derived height."),
                 io.Combo.Input(
@@ -433,7 +484,8 @@ class LTXAutoDirector(io.ComfyNode):
     def execute(cls, model, clip, storyboard_images, llm_response, global_prompt="",
                 segment_count=6, duration_frames=120, duration_seconds=5.0,
                 segment_lengths="", guide_strength="1.0", epsilon=1e-3, frame_rate=24,
-                parse_mode="auto", custom_width=0, custom_height=0,
+                parse_mode="auto", grid_layout="auto", auto_crop_borders=True,
+                border_sensitivity=0.10, border_crop_px=8, custom_width=0, custom_height=0,
                 resize_method="maintain aspect ratio", divisible_by=32, img_compression=18,
                 audio_vae=None, optional_latent=None) -> io.NodeOutput:
         if storyboard_images is None or storyboard_images.shape[0] < 1:
@@ -447,12 +499,24 @@ class LTXAutoDirector(io.ComfyNode):
         duration_frames = _to_int(duration_frames, 120)
         frame_rate = _to_float(frame_rate, 24.0)
         epsilon = _to_float(epsilon, 0.001)
+        auto_crop_borders = _to_bool(auto_crop_borders, True)
+        border_sensitivity = max(0.01, min(0.45, _to_float(border_sensitivity, 0.10)))
+        border_crop_px = max(0, _to_int(border_crop_px, 8))
         custom_width = max(0, _to_int(custom_width, 0))
         custom_height = max(0, _to_int(custom_height, 0))
         divisible_by = max(1, _to_int(divisible_by, 32))
         img_compression = max(0, _to_int(img_compression, 18))
         if parse_mode not in ("auto", "json", "numbered_text"):
             parse_mode = "auto"
+
+        storyboard_images = _maybe_split_single_six_grid_storyboard(
+            storyboard_images,
+            segment_count,
+            auto_crop_borders=auto_crop_borders,
+            border_sensitivity=border_sensitivity,
+            border_crop_px=border_crop_px,
+            grid_layout=grid_layout,
+        )
 
         batch_count = int(storyboard_images.shape[0])
         count = max(1, min(segment_count, batch_count, MAX_AUTO_SEGMENTS))
@@ -535,9 +599,9 @@ class LTXAutoDirector(io.ComfyNode):
 
 
 NODE_CLASS_MAPPINGS = {
-    "CS-LTXAutoDirector": LTXAutoDirector,
+    "DF-LTXAutoDirector": LTXAutoDirector,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "CS-LTXAutoDirector": "CS LTX Auto Director",
+    "DF-LTXAutoDirector": "DF LTX Auto Director",
 }

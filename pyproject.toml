@@ -1,7 +1,7 @@
 [project]
-name = "CS-WhatDreamsCost-ComfyUI"
-description = "CS LTX six-grid director and supporting ComfyUI nodes based on WhatDreamsCost-ComfyUI."
-version = "1.4.3"
+name = "DF-WhatDreamsCost-ComfyUI"
+description = "Independent DF six-grid director node with automatic border-aware splitting for ComfyUI."
+version = "1.0.0"
 license = {file = "LICENSE"} 
 # classifiers = [
 #     # For OS-independent nodes (works on all operating systems)
@@ -22,13 +22,13 @@ license = {file = "LICENSE"}
 
 
 [project.urls]
-Repository = "https://github.com/yg496/CS-WhatDreamsCost-ComfyUI"
+Repository = "https://github.com/your-name/DF-WhatDreamsCost-ComfyUI"
 #  Used by Comfy Registry https://registry.comfy.org
-Documentation = "https://github.com/yg496/CS-WhatDreamsCost-ComfyUI/wiki"
-"Bug Tracker" = "https://github.com/yg496/CS-WhatDreamsCost-ComfyUI/issues"
+Documentation = "https://github.com/your-name/DF-WhatDreamsCost-ComfyUI/wiki"
+"Bug Tracker" = "https://github.com/your-name/DF-WhatDreamsCost-ComfyUI/issues"
 
 [tool.comfy]
-PublisherId = "yg496"
-DisplayName = "CS-WhatDreamsCost-ComfyUI"
+PublisherId = "your-name"
+DisplayName = "DF-WhatDreamsCost-ComfyUI"
 includes = [] 
 # "requires-comfyui" = ">=1.0.0"  # ComfyUI version compatibility

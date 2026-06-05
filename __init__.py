@@ -12,10 +12,12 @@ from comfy_api.latest import ComfyExtension, io
 from typing_extensions import override
 
 
-class CSWhatDreamsCostExtension(ComfyExtension):
+class DFWhatDreamsCostExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
         return [
+            LTXKeyframer,
+            LTXSequencer,
             LTXDirector,
             LTXAutoDirector,
             LTXSixGridDirector,
@@ -23,36 +25,36 @@ class CSWhatDreamsCostExtension(ComfyExtension):
         ]
 
 
-async def comfy_entrypoint() -> CSWhatDreamsCostExtension:
-    return CSWhatDreamsCostExtension()
+async def comfy_entrypoint() -> DFWhatDreamsCostExtension:
+    return DFWhatDreamsCostExtension()
 
 
 NODE_CLASS_MAPPINGS = {
-    "CS-LTXKeyframer": LTXKeyframer,
-    "CS-MultiImageLoader": MultiImageLoader,
-    "CS-LTXSequencer": LTXSequencer,
-    "CS-SpeechLengthCalculator": SpeechLengthCalculator,
-    "CS-LoadAudioUI": LoadAudioUI,
-    "CS-LoadVideoUI": LoadVideoUI,
-    "CS-LTXDirector": LTXDirector,
-    "CS-LTXAutoDirector": LTXAutoDirector,
-    "CS-LTXSixGridDirector": LTXSixGridDirector,
-    "CS-LTXDirectorGuide": LTXDirectorGuide,
+    "DF-LTXKeyframer": LTXKeyframer,
+    "DF-MultiImageLoader": MultiImageLoader,
+    "DF-LTXSequencer": LTXSequencer,
+    "DF-SpeechLengthCalculator": SpeechLengthCalculator,
+    "DF-LoadAudioUI": LoadAudioUI,
+    "DF-LoadVideoUI": LoadVideoUI,
+    "DF-LTXDirector": LTXDirector,
+    "DF-LTXAutoDirector": LTXAutoDirector,
+    "DF-LTXSixGridDirector": LTXSixGridDirector,
+    "DF-LTXDirectorGuide": LTXDirectorGuide,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "CS-LTXKeyframer": "CS LTX Keyframer",
-    "CS-MultiImageLoader": "CS Multi Image Loader",
-    "CS-LTXSequencer": "CS LTX Sequencer",
-    "CS-SpeechLengthCalculator": "CS Speech Length Calculator",
-    "CS-LoadAudioUI": "CS Load Audio UI",
-    "CS-LoadVideoUI": "CS Load Video UI",
-    "CS-LTXDirector": "CS LTX Director",
-    "CS-LTXAutoDirector": "CS LTX Auto Director",
-    "CS-LTXSixGridDirector": "CS-LTX \u516d\u5bab\u683c\u5bfc\u6f14\u53f0",
-    "CS-LTXDirectorGuide": "CS LTX Director Guide",
+    "DF-LTXKeyframer": "DF LTX Keyframer",
+    "DF-MultiImageLoader": "DF Multi Image Loader",
+    "DF-LTXSequencer": "DF LTX Sequencer",
+    "DF-SpeechLengthCalculator": "DF Speech Length Calculator",
+    "DF-LoadAudioUI": "DF Load Audio UI",
+    "DF-LoadVideoUI": "DF Load Video UI",
+    "DF-LTXDirector": "DF LTX Director",
+    "DF-LTXAutoDirector": "DF LTX Auto Director",
+    "DF-LTXSixGridDirector": "DF-LTX \u516d\u5bab\u683c\u5bfc\u6f14\u53f0",
+    "DF-LTXDirectorGuide": "DF LTX Director Guide",
 }
 
-WEB_DIRECTORY = "./js"
+WEB_DIRECTORY = "./df_js"
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

@@ -960,7 +960,7 @@
     },
     {
       "id": 8,
-      "type": "CS-CS-LTXDirectorGuide",
+      "type": "DF-LTXDirectorGuide",
       "pos": [
         3290,
         4400
@@ -1029,7 +1029,7 @@
       "properties": {
         "cnr_id": "cs-whatdreamscost-comfyui",
         "ver": "5cae3c00186ff2eb79771070f05a2c4e02f329bb",
-        "Node name for S&R": "CS-CS-LTXDirectorGuide",
+        "Node name for S&R": "DF-LTXDirectorGuide",
         "aux_id": "kijai/ComfyUI-PromptRelay"
       },
       "widgets_values": [
@@ -1162,7 +1162,7 @@
     },
     {
       "id": 58,
-      "type": "CS-CS-LTXDirectorGuide",
+      "type": "DF-LTXDirectorGuide",
       "pos": [
         3300,
         3940
@@ -1227,7 +1227,7 @@
       "properties": {
         "cnr_id": "cs-whatdreamscost-comfyui",
         "ver": "5cae3c00186ff2eb79771070f05a2c4e02f329bb",
-        "Node name for S&R": "CS-CS-LTXDirectorGuide",
+        "Node name for S&R": "DF-LTXDirectorGuide",
         "aux_id": "kijai/ComfyUI-PromptRelay"
       },
       "widgets_values": [
@@ -1343,7 +1343,7 @@
     },
     {
       "id": 46,
-      "type": "CS-LTXDirector",
+      "type": "DF-LTXDirector",
       "pos": [
         1860,
         3970
@@ -1437,7 +1437,7 @@
       "properties": {
         "cnr_id": "cs-whatdreamscost-comfyui",
         "ver": "5cae3c00186ff2eb79771070f05a2c4e02f329bb",
-        "Node name for S&R": "CS-LTXDirector",
+        "Node name for S&R": "DF-LTXDirector",
         "aux_id": "kijai/ComfyUI-PromptRelay"
       },
       "widgets_values": [
