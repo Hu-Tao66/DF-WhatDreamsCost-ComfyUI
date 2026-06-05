@@ -1,40 +1,44 @@
-# CS-WhatDreamsCost-ComfyUI
+# DF-WhatDreamsCost-ComfyUI
 
-## Source and Attribution
+## 来源说明
 
-This project is based on [WhatDreamsCost/WhatDreamsCost-ComfyUI](https://github.com/WhatDreamsCost/WhatDreamsCost-ComfyUI).
-The original author is credited here as the pre-existing source. This repository is a CS fork that adds a separate `CS-` namespace, so it can be installed beside the original plugin without replacing the original WhatDreamsCost node IDs.
+`DF-WhatDreamsCost-ComfyUI` 是基于 [yg496/CS-WhatDreamsCost-ComfyUI](https://github.com/yg496/CS-WhatDreamsCost-ComfyUI) 的二次 fork。CS 插件本身基于 [WhatDreamsCost/WhatDreamsCost-ComfyUI](https://github.com/WhatDreamsCost/WhatDreamsCost-ComfyUI)。本仓库保留上游作者署名和原有功能基础，只在独立 `DF-` 命名空间中注册节点，方便和原版、CS 版同时安装。
 
-## Overview
+## 相比 CS 版新增了什么
 
-`CS-WhatDreamsCost-ComfyUI` focuses on an automated LTX storyboard workflow:
+这个 DF fork 的主要目标是解决六宫格分镜图带白边、灰白边框或分隔线时，拆分后的单张分镜仍然残留边线的问题。
 
-- Split a single 3x2 six-grid storyboard image into six ordered shots.
-- Pass LLM/GPT/Qwen shot text into the director timeline.
-- Review and manually edit each shot prompt, duration, image guide, and audio segment before generation.
-- Keep the original LTX Director timeline workflow, while registering all public nodes under `CS-...` IDs.
-- Add guide latent size alignment in `CS-LTXDirectorGuide` to reduce LTX guide insertion size errors.
+新增和调整内容：
 
-这个分支的核心目标是把“六宫格图像 -> 六段分镜 -> 可编辑导演台时间线 -> LTX 生成”尽量自动化，同时保留前端手动修改能力。
+- 在 `DF-LTXSixGridDirector` 中增加六宫格白边/灰白分隔线自动裁剪。
+- 支持 `3列 x 2行` 和 `2列 x 3行` 六宫格布局，也可以自动检测布局。
+- 增加 `自动裁掉六宫格边框`、`边框检测灵敏度`、`分隔线安全裁剪像素` 参数。
+- 裁掉边框后会把分镜恢复到原单格尺寸，例如 864x1024 的 3x2 六宫格会拆成 6 张 288x512。
+- 前端时间线预览也同步使用裁白边后的裁剪区域，避免预览和实际执行不一致。
+- `DF-LTXAutoDirector` 也加入同一套逻辑：如果输入是一张合成六宫格图，会先自动裁白边并拆成 6 张；如果输入已经是批量分镜图，则保持 CS 原逻辑。
+- 所有公开节点保持 CS 原节点名称结构，只把 `CS-` 前缀改为 `DF-`，避免和 CS 插件冲突。
+- `DF-LoadVideoUI` 的后端接口使用独立 `/df_video_ui_*` 路由，避免和 CS 版同时安装时路由冲突。
 
-## CS Namespace
+除了上面这些差异，其它节点功能基本保持 CS 版逻辑。
 
-This fork intentionally registers public nodes with `CS-` IDs. The legacy WhatDreamsCost node IDs are not registered here, so shared platforms such as RunningHub should not treat this package as a replacement for the original plugin.
+## 节点命名
 
-| Original-style node | CS fork node ID |
+本 fork 按“CS 原名称换 DF 前缀”的规则注册节点。旧的 WhatDreamsCost 原始节点名不会被覆盖，CS 版节点名也不会被覆盖。
+
+| CS 版节点 | DF fork 节点 |
 | --- | --- |
-| `LTXDirector` | `CS-LTXDirector` |
-| `LTXAutoDirector` | `CS-LTXAutoDirector` |
-| `LTXSixGridDirector` | `CS-LTXSixGridDirector` |
-| `LTXDirectorGuide` | `CS-LTXDirectorGuide` |
-| `LTXKeyframer` | `CS-LTXKeyframer` |
-| `LTXSequencer` | `CS-LTXSequencer` |
-| `MultiImageLoader` | `CS-MultiImageLoader` |
-| `SpeechLengthCalculator` | `CS-SpeechLengthCalculator` |
-| `LoadAudioUI` | `CS-LoadAudioUI` |
-| `LoadVideoUI` | `CS-LoadVideoUI` |
+| `CS-LTXDirector` | `DF-LTXDirector` |
+| `CS-LTXAutoDirector` | `DF-LTXAutoDirector` |
+| `CS-LTXSixGridDirector` | `DF-LTXSixGridDirector` |
+| `CS-LTXDirectorGuide` | `DF-LTXDirectorGuide` |
+| `CS-LTXKeyframer` | `DF-LTXKeyframer` |
+| `CS-LTXSequencer` | `DF-LTXSequencer` |
+| `CS-MultiImageLoader` | `DF-MultiImageLoader` |
+| `CS-SpeechLengthCalculator` | `DF-SpeechLengthCalculator` |
+| `CS-LoadAudioUI` | `DF-LoadAudioUI` |
+| `CS-LoadVideoUI` | `DF-LoadVideoUI` |
 
-Old workflows that reference unprefixed WhatDreamsCost node IDs need to be updated to the matching `CS-...` node IDs before they can use this fork.
+如果你从 CS 工作流迁移到 DF，需要把节点类型从 `CS-...` 替换成对应的 `DF-...`。其中六宫格节点是 `DF-LTXSixGridDirector`。
 
 ## ▶️ YouTube Tutorial Videos
 
@@ -55,26 +59,34 @@ Old workflows that reference unprefixed WhatDreamsCost node IDs need to be updat
   </tr>
 </table>
 
-## How to Install
+## 安装
 
-1. Navigate to your `ComfyUI/custom_nodes` folder.
-2. Clone this repository:
+1. 进入 `ComfyUI/custom_nodes` 目录。
+2. 克隆本仓库：
 
 ```bash
-git clone https://github.com/yg496/CS-WhatDreamsCost-ComfyUI.git
+git clone https://github.com/your-name/DF-WhatDreamsCost-ComfyUI.git
 ```
 
-3. Restart ComfyUI.
-4. Search for `CS-` in the ComfyUI node menu.
+3. 重启 ComfyUI。
+4. 在 ComfyUI 节点菜单里搜索 `DF-`。
 
-You can also install it through ComfyUI Manager after the package is available there.
+如果后续提交到 ComfyUI Manager，也可以通过 Manager 安装。
 
-**Important**
+**注意**
 
-If you don't see the latest version (v1.4.3) yet in the manager then just downloaded the nightly version (or fetch the updates to update the list to see the latest version). 
-Also you will need to update ComfyUI-LTXVideo and ComfyUI-KJNodes to the latest version as well. You cannot use this node without updating ComfyUI-LTXVideo!
+需要同时保持 ComfyUI-LTXVideo 和 ComfyUI-KJNodes 为较新版本。LTX 相关节点依赖这些插件的接口。
 
-# Recent Updates
+# 更新记录
+
+**DF fork**
+  * **Based on CS-WhatDreamsCost-ComfyUI, with border-aware six-grid splitting**
+    - Keeps the CS node set and renames public nodes from `CS-...` to `DF-...`.
+    - Adds white/gray border and divider-line cropping to `DF-LTXSixGridDirector`.
+    - Adds the same single six-grid auto-split and border-crop path to `DF-LTXAutoDirector`.
+    - Supports automatic layout detection, `3列 x 2行`, and `2列 x 3行`.
+    - Restores cropped shots to the original cell size after border removal.
+    - Uses independent `DF-LoadVideoUI` backend routes so this fork can coexist with the CS plugin.
 
 **v1.4.4**
   * **Six-grid source refresh fix**
@@ -99,14 +111,14 @@ Also you will need to update ComfyUI-LTXVideo and ComfyUI-KJNodes to the latest 
     - The six-grid director now reads connected LLM text from upstream text display nodes, such as `showAnything`, instead of relying only on the local `llm_response` widget.
     - The timeline polls the connected text source and syncs updated shot prompts into the front-end editor automatically.
 
-**v1.4.0 CS fork**
-  * **New node: CS-LTX Six-Grid Director / CS-LTX 六宫格导演台**
+**v1.4.0 DF fork**
+  * **New node: DF-LTX Six-Grid Director / DF-LTX 六宫格导演台**
     - Adds an automatic six-grid storyboard workflow on top of the original LTX Director timeline.
     - Accepts a single 3x2 storyboard image or a batch of six images, then builds six editable timeline shots.
     - Connects LLM/GPT/Qwen shot text into the timeline so prompts can be reviewed and manually edited before generation.
-    - Registers all public nodes under `CS-...` IDs to avoid overwriting the original WhatDreamsCost nodes on shared platforms.
+    - Registers all public nodes under `DF-...` IDs to avoid overwriting the original WhatDreamsCost nodes on shared platforms.
     - Refreshes six-grid previews when the upstream storyboard image changes.
-    - Adds a guide latent size alignment fix in `CS-LTXDirectorGuide` for more stable LTX guide insertion.
+    - Adds a guide latent size alignment fix in `DF-LTXDirectorGuide` for more stable LTX guide insertion.
 
 **v1.3.9**
   * **Fixed recent updates not showing in the manager**
@@ -202,9 +214,9 @@ Overhaul of the load audio node. Features a simple interface to easily trim audi
 
 # ⚙️ Custom Nodes
 
-## CS-LTX Six-Grid Director / CS-LTX 六宫格导演台
+## DF-LTX Six-Grid Director / DF-LTX 六宫格导演台
 
-`CS-LTX 六宫格导演台` 是这个分支的核心新增节点。它保留了原版 LTX Director 的时间线编辑能力，同时把六宫格分镜图、LLM/GPT/Qwen 分镜文本、LTX 引导图生成流程接到一起，让“六宫格图像 -> 六段分镜 -> 可编辑时间线 -> LTX 生成”尽量自动化。
+`DF-LTX 六宫格导演台` 是这个分支的核心新增节点。它保留了原版 LTX Director 的时间线编辑能力，同时把六宫格分镜图、LLM/GPT/Qwen 分镜文本、LTX 引导图生成流程接到一起，让“六宫格图像 -> 六段分镜 -> 可编辑时间线 -> LTX 生成”尽量自动化。
 
 它适合这样的工作流：先由上游节点生成一张 3x2 六宫格分镜图，再让反推模型或 GPT 输出 6 段分镜描述，导演台节点会自动把六宫格拆成 6 个分镜块，并把对应文本写入时间线。运行前你仍然可以在前端手动修改每段分镜的提示词、时长和引导强度。
 
@@ -212,9 +224,9 @@ Overhaul of the load audio node. Features a simple interface to easily trim audi
 
 | Name | Meaning |
 | --- | --- |
-| `CS-LTX 六宫格导演台` | ComfyUI 里看到的节点显示名。 |
-| `CS-LTXSixGridDirector` | 新的节点内部 ID。 |
-| `CS-...` | 这个分支的所有公开节点都使用 `CS-` 前缀，避免覆盖原作者插件。 |
+| `DF-LTX 六宫格导演台` | ComfyUI 里看到的节点显示名。 |
+| `DF-LTXSixGridDirector` | 新的节点内部 ID。 |
+| `DF-...` | 这个分支的所有公开节点都使用 `DF-` 前缀，避免覆盖原作者插件。 |
 
 **基础流程：**
 
@@ -224,7 +236,7 @@ Overhaul of the load audio node. Features a simple interface to easily trim audi
 4. 把 LTX 模型和 CLIP 接到 `模型` / `model` 与 `文本编码器` / `clip`。
 5. 如果工作流需要音频潜空间，可以额外接入 Audio VAE。
 6. 打开节点前端时间线，检查 6 个图像分镜块，并按需要调整每段时长和提示词。
-7. 把 `引导数据` / `guide_data` 接到 `CS-LTXDirectorGuide`，把 `视频潜空间` / `video_latent` 接入 LTX 采样链路。
+7. 把 `引导数据` / `guide_data` 接到 `DF-LTXDirectorGuide`，把 `视频潜空间` / `video_latent` 接入 LTX 采样链路。
 
 **六宫格读取顺序：**
 
@@ -271,10 +283,10 @@ Overhaul of the load audio node. Features a simple interface to easily trim audi
 
 **LTX 引导尺寸修复：**
 
-有些 LTX 工作流里，引导图经过 VAE 编码后会得到和主视频 latent 不一致的空间尺寸，例如 `Expected size 33 but got size 17`。这个分支在 `CS-LTXDirectorGuide` 中加入了尺寸对齐步骤，会在插入 keyframe 前把 guide latent 自动对齐到当前视频 latent 的尺寸，减少这类报错。
+有些 LTX 工作流里，引导图经过 VAE 编码后会得到和主视频 latent 不一致的空间尺寸，例如 `Expected size 33 but got size 17`。这个分支在 `DF-LTXDirectorGuide` 中加入了尺寸对齐步骤，会在插入 keyframe 前把 guide latent 自动对齐到当前视频 latent 的尺寸，减少这类报错。
 
 
-## CS-LTX Director
+## DF-LTX Director
 <img width="1481" height="833" alt="Clipboard Image (2)" src="https://github.com/user-attachments/assets/08f3fe53-9393-4f5d-9de5-58b229fbed47" />
 
 A Complete Timeline Editor For LTX 2.3. This is the sucessor of my previous nodes, and has loads of features in it. It was originally based off of [Kijai's Prompt Relay node](https://github.com/kijai/ComfyUI-PromptRelay) and my LTX Sequencer/Multi Image Loader nodes.
@@ -287,38 +299,38 @@ A Complete Timeline Editor For LTX 2.3. This is the sucessor of my previous node
 - **Image to Video:** Part of the goal of this node was to make it easier to do everything, including Image to Video. It has built in resize functionality, and of course all the benifits of the prompt relay and custom audio integration.
 - **Text to Video:** Use text segments to create T2V videos. Compatible with all other features of the node.
 
-Download workflows here: https://github.com/yg496/CS-WhatDreamsCost-ComfyUI/tree/main/example_workflows
+Download workflows here: https://github.com/your-name/DF-WhatDreamsCost-ComfyUI/tree/main/example_workflows
 
 **Tutorial videos and documentation coming soon**
 
 
-## CS-Multi Image Loader
+## DF-Multi Image Loader
 <img width="1280" height="720" alt="Multi_Image_Loader_Wide_Gif" src="https://github.com/user-attachments/assets/99b6afd8-5197-4e6c-81da-a7bd156c42c7" />
 
 An Image loader that features a built in gallery, allowing your to easily rearrange images and output them seperately or batched together. It also combines the image resize node and LTXVPreprocess node to reduce clutter in LTX workflows.
 
-## CS-LTX Sequencer
+## DF-LTX Sequencer
 ![LTX_Sequencer_GIF](https://github.com/user-attachments/assets/88f27155-f50e-4cb2-b937-ab173e6bdf0b)
 
 An overhaul of the LTXVAddGuideMulti node. It allows you to quickly create FFLF (First Frame Last Frame) videos, shot sequences, supports any number of middle frames.
 
-Connect the `CS-MultiImageLoader` node's `multi_output` to automatically update the node's widgets.
+Connect the `DF-MultiImageLoader` node's `multi_output` to automatically update the node's widgets.
 
 It also has a sync feature that syncs all LTX Sequencer nodes together in realtime, removing the need to edit every single node manually every time you want to make a change to something. 
 
 
-## CS-LTX Keyframer
+## DF-LTX Keyframer
 <img width="1082" height="608" alt="LTX Keyframer Wide" src="https://github.com/user-attachments/assets/850ba4a2-dbca-4e5a-a580-1c271e9f0c41" />
 
 An overhaul of the LTXVImgToVideoInplaceKJ node. It allows you to quickly create FFLF (First Frame Last Frame) videos and shot sequences. Also upports any number of middle frames.
 
-Connect the `CS-MultiImageLoader` node's `multi_output` to automatically update the node's widgets.
+Connect the `DF-MultiImageLoader` node's `multi_output` to automatically update the node's widgets.
 
 It also has a sync feature that syncs all LTX Keyframer nodes together in realtime, removing the need to edit every single node manually every time you want to make a change to something. 
 
 **I would recommend using the LTX Sequencer Node over this node, after further testing it seems superior in at pretty much everything. I'll leave it in just in case more people want to test it**
 
-## CS-Speech Length Calculator
+## DF-Speech Length Calculator
 <img width="1280" height="720" alt="Speech Length Calculator v2 Gif" src="https://github.com/user-attachments/assets/04b9a1cf-20e4-4b7b-a9c6-4a5a0825995b" />
 <br>
 <br>
@@ -328,7 +340,7 @@ If you connect another string/text node to the text_input, it will still update 
 
 I kept having to play the guessing game on my own generations so I made this node to make it easier :man_shrugging:
 
-## CS-Load Video UI  
+## DF-Load Video UI  
 <table width="100%">
   <tr>
     <td width="50%" align="center">
@@ -356,14 +368,14 @@ An upgraded Load Video node. It has the following features:
 
 Please note that due to ComfyUI limitations (and the fact that this node doesn't use any addtional libraries), this node will not work well for outputting large videos. You can trim any length of video without a problem, but if the output is still large it will end up using a lot of RAM. I have implemented various optimizations though to make it use less memory.
 
-## CS-Load Audio UI  
+## DF-Load Audio UI  
 <img width="1280" height="720" alt="Load_Audio_UI_V2" src="https://github.com/user-attachments/assets/e3dc5c8d-d0b9-4336-8196-944204719239" />
 <br>
 <br>
 An upgraded Load Audio node. Features a simple interface to easily trim audio. Also allows dragging and dropping files (fixes the original node that doesn't allow dropping in videos). Also compatible with nodes 2.0.
 
 # 💡 Workflows
-Download workflows here: https://github.com/yg496/CS-WhatDreamsCost-ComfyUI/tree/main/example_workflows
+Download workflows here: https://github.com/your-name/DF-WhatDreamsCost-ComfyUI/tree/main/example_workflows
 
 # ❗ Known Issues
 
