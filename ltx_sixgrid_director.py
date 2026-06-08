@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from uuid import uuid4
 
 import torch
@@ -67,6 +68,7 @@ GRID_LAYOUT_ALIASES = {
 
 DEFAULT_BORDER_SAFE_CROP_PX = 8
 MAX_BORDER_SAFE_CROP_PX = 48
+DEFAULT_BORDER_SENSITIVITY = 0.10
 
 
 def _normalize_choice(value, aliases, default):
@@ -90,6 +92,18 @@ def _to_bool(value, default=False):
     if text in {"false", "0", "no", "n", "off", "\u5426", "\u5173", "\u7981\u7528"}:
         return False
     return default
+
+
+def _repair_border_settings(border_sensitivity, border_crop_px):
+    sensitivity = _to_float(border_sensitivity, DEFAULT_BORDER_SENSITIVITY)
+    crop_px = _to_int(border_crop_px, DEFAULT_BORDER_SAFE_CROP_PX)
+
+    if not math.isfinite(float(sensitivity)) or sensitivity < 0.01 or sensitivity > 0.45:
+        if sensitivity > 1 and crop_px == DEFAULT_BORDER_SAFE_CROP_PX:
+            crop_px = _to_int(sensitivity, DEFAULT_BORDER_SAFE_CROP_PX)
+        sensitivity = DEFAULT_BORDER_SENSITIVITY
+
+    return max(0.01, min(0.45, float(sensitivity))), max(0, int(crop_px))
 
 
 def _image_segment_count(timeline):
@@ -128,7 +142,12 @@ def _axis_border_mask(storyboard_images, axis, sensitivity):
 
 def _safe_border_crop_px(cell_size, border_crop_px):
     cell_size = max(1.0, float(cell_size))
-    requested = max(0, int(border_crop_px))
+    try:
+        requested_value = float(border_crop_px)
+        requested = int(round(requested_value)) if math.isfinite(requested_value) else 0
+    except (TypeError, ValueError):
+        requested = 0
+    requested = max(0, requested)
     automatic = max(DEFAULT_BORDER_SAFE_CROP_PX, int(round(cell_size * 0.022)))
     safe_crop = max(requested, automatic)
     max_safe = max(0, min(MAX_BORDER_SAFE_CROP_PX, int(cell_size // 5)))
@@ -244,8 +263,10 @@ def _axis_intervals(storyboard_images, parts, axis, sensitivity, border_crop_px)
     for index in range(parts):
         fallback_start = int(round(index * axis_len / parts))
         fallback_end = int(round((index + 1) * axis_len / parts))
-        start = int(bands[index][1])
-        end = int(bands[index + 1][0])
+        left_band = bands[index]
+        right_band = bands[index + 1]
+        start = int(left_band[1])
+        end = int(right_band[0])
 
         if end <= start:
             start, end = fallback_start, fallback_end
@@ -255,6 +276,16 @@ def _axis_intervals(storyboard_images, parts, axis, sensitivity, border_crop_px)
         if fallback_end - fallback_start > safe_crop * 2:
             start = max(start, fallback_start + safe_crop)
             end = min(end, fallback_end - safe_crop)
+            # Detected divider bands often have a small glow/antialias halo just inside
+            # the content cells. Step inward from internal dividers instead of cropping
+            # exactly at the detected band edge.
+            if index > 0 and left_band[1] > left_band[0]:
+                start = max(start, min(axis_len - 1, int(left_band[1]) + safe_crop))
+            if index + 1 < parts and right_band[1] > right_band[0]:
+                end = min(end, max(0, int(right_band[0]) - safe_crop))
+            if end <= start:
+                start = max(0, min(axis_len - 1, fallback_start + safe_crop))
+                end = max(start + 1, min(axis_len, fallback_end - safe_crop))
         intervals.append((start, end))
 
     return intervals
@@ -295,10 +326,7 @@ def _border_like_ratio(edge, sensitivity):
     saturation = max_channel - min_channel
     bright_threshold = max(0.60, 1.0 - max(float(sensitivity), 0.16) * 2.2)
     saturation_threshold = min(0.40, 0.28 + float(sensitivity) * 0.4)
-    border_like = (
-        ((luminance >= bright_threshold) | (luminance <= float(sensitivity)))
-        & (saturation <= saturation_threshold)
-    )
+    border_like = (luminance >= bright_threshold) & (saturation <= saturation_threshold)
     return float(border_like.float().mean().item())
 
 
@@ -364,6 +392,7 @@ def _split_single_six_grid_image(
         return storyboard_images
 
     _, height, width, _ = storyboard_images.shape
+    border_sensitivity, border_crop_px = _repair_border_settings(border_sensitivity, border_crop_px)
     cols, rows = _resolve_grid_layout(storyboard_images, grid_layout, border_sensitivity)
     crops = []
 
@@ -688,8 +717,7 @@ class LTXSixGridDirector(io.ComfyNode):
         custom_height = max(0, _to_int(custom_height, 0))
         grid_layout = _normalize_choice(grid_layout, GRID_LAYOUT_ALIASES, "auto")
         auto_crop_borders = _to_bool(auto_crop_borders, True)
-        border_sensitivity = max(0.01, min(0.45, _to_float(border_sensitivity, 0.10)))
-        border_crop_px = max(0, _to_int(border_crop_px, 8))
+        border_sensitivity, border_crop_px = _repair_border_settings(border_sensitivity, border_crop_px)
         divisible_by = max(1, _to_int(divisible_by, 32))
         img_compression = max(0, _to_int(img_compression, 18))
         parse_mode = _normalize_choice(parse_mode, PARSE_MODE_ALIASES, "auto")

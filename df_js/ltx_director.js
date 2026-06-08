@@ -9,6 +9,9 @@ const CANVAS_HEIGHT = RULER_HEIGHT + BLOCK_HEIGHT + AUDIO_TRACK_HEIGHT;
 const HANDLE_HIT_PX = 14;
 const MIN_SEGMENT_LENGTH = 6;
 const MAX_THUMBNAIL_DIM = 512; // Increased to maintain quality for taller images
+const SIX_GRID_CROP_ALGORITHM_VERSION = "crop-halo-layout-v3";
+const DEFAULT_BORDER_SENSITIVITY = 0.10;
+const DEFAULT_BORDER_CROP_PX = 8;
 
 const HIDDEN_WIDGET_NAMES = ["timeline_data", "local_prompts", "segment_lengths", "transition_smoothness", "guide_strength", "audio_data", "use_custom_audio"];
 
@@ -936,11 +939,66 @@ function prNumberWidgetValue(node, name, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function prSetWidgetValue(widget, value) {
+  if (!widget || widget.value === value) return false;
+  widget.value = value;
+  return true;
+}
+
+function prFiniteNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function prClampNumber(value, min, max, fallback = min) {
+  const number = prFiniteNumber(value, fallback);
+  return clamp(number, min, max);
+}
+
+function prComboIndexValue(value, optionCount) {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const text = String(value).trim();
+  if (!/^\d+$/.test(text)) return null;
+  const index = Number(text);
+  return Number.isInteger(index) && index >= 0 && index < optionCount ? index : null;
+}
+
+function prNormalizeParseMode(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text || text === "auto" || text.includes("\u81ea\u52a8")) return "auto";
+  if (text === "json" || text.includes("json")) return "json";
+  if (text === "numbered_text" || text.includes("numbered") || text.includes("\u7f16\u53f7")) return "numbered_text";
+  return "auto";
+}
+
+function prNormalizeResizeMethod(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (text === "stretch to fit" || text.includes("stretch") || text.includes("\u62c9\u4f38")) return "stretch to fit";
+  if (text === "pad" || text.includes("pad") || text.includes("\u7559\u767d")) return "pad";
+  if (text === "crop" || text.includes("\u88c1\u526a")) return "crop";
+  return "maintain aspect ratio";
+}
+
+function prComboLabelFromValue(widgetName, value) {
+  const labels = SIX_GRID_COMBO_VALUE_LABELS[widgetName];
+  if (!labels) return value;
+  const keys = Object.keys(labels);
+  const index = prComboIndexValue(value, keys.length);
+  if (index !== null) return labels[keys[index]];
+  if (Object.prototype.hasOwnProperty.call(labels, value)) return labels[value];
+
+  if (widgetName === "display_mode") return prDisplayModeValue(prNormalizeDisplayMode(value));
+  if (widgetName === "parse_mode") return labels[prNormalizeParseMode(value)];
+  if (widgetName === "resize_method") return labels[prNormalizeResizeMethod(value)];
+  if (widgetName === "grid_layout") return labels[prNormalizeGridLayout(value)];
+  return value;
+}
+
 function prGetBorderCropSettings(node) {
   return {
     autoCropBorders: prBoolWidgetValue(node, "auto_crop_borders", true),
-    borderSensitivity: clamp(prNumberWidgetValue(node, "border_sensitivity", 0.10), 0.01, 0.45),
-    borderCropPx: Math.max(0, Math.round(prNumberWidgetValue(node, "border_crop_px", 8))),
+    borderSensitivity: prClampNumber(prGetWidgetValue(node, "border_sensitivity", DEFAULT_BORDER_SENSITIVITY), 0.01, 0.45, DEFAULT_BORDER_SENSITIVITY),
+    borderCropPx: Math.max(0, Math.round(prFiniteNumber(prGetWidgetValue(node, "border_crop_px", DEFAULT_BORDER_CROP_PX), DEFAULT_BORDER_CROP_PX))),
   };
 }
 
@@ -1025,7 +1083,7 @@ function prMeasureImageProjections(img, maxDim = 700) {
 
 function prDetectGridLayoutFromImage(img) {
   const measured = prMeasureImageProjections(img, 420);
-  if (!measured) return img?.naturalHeight > img?.naturalWidth * 1.12 ? "2x3" : "3x2";
+  if (!measured) return "3x2";
   const { width, height, xProjection, yProjection } = measured;
 
     const score2x3 =
@@ -1039,7 +1097,7 @@ function prDetectGridLayoutFromImage(img) {
 
     if (score2x3 > score3x2 + 0.08) return "2x3";
     if (score3x2 > score2x3 + 0.08) return "3x2";
-    return img.naturalHeight > img.naturalWidth * 1.12 ? "2x3" : "3x2";
+    return "3x2";
 }
 
 function prResolveGridDims(node, source = null, img = null) {
@@ -1133,8 +1191,10 @@ function prBuildAxisIntervals(projection, saturationProjection, parts, sensitivi
   for (let i = 0; i < parts; i++) {
     const fallbackStart = Math.round(i * axisLen / parts);
     const fallbackEnd = Math.round((i + 1) * axisLen / parts);
-    let start = bands[i][1];
-    let end = bands[i + 1][0];
+    const leftBand = bands[i];
+    const rightBand = bands[i + 1];
+    let start = leftBand[1];
+    let end = rightBand[0];
     if (end <= start) {
       start = fallbackStart;
       end = fallbackEnd;
@@ -1144,6 +1204,16 @@ function prBuildAxisIntervals(projection, saturationProjection, parts, sensitivi
     if (fallbackEnd - fallbackStart > safeCrop * 2) {
       start = Math.max(start, fallbackStart + safeCrop);
       end = Math.min(end, fallbackEnd - safeCrop);
+      if (i > 0 && leftBand[1] > leftBand[0]) {
+        start = Math.max(start, Math.min(axisLen - 1, leftBand[1] + safeCrop));
+      }
+      if (i + 1 < parts && rightBand[1] > rightBand[0]) {
+        end = Math.min(end, Math.max(0, rightBand[0] - safeCrop));
+      }
+      if (end <= start) {
+        start = clamp(fallbackStart + safeCrop, 0, axisLen - 1);
+        end = clamp(fallbackEnd - safeCrop, start + 1, axisLen);
+      }
     }
     intervals.push([Math.round(start / scale), Math.round(end / scale)]);
   }
@@ -1162,7 +1232,7 @@ function prPixelBorderLike(data, width, x, y, sensitivity) {
   const saturation = maxChannel - minChannel;
   const threshold = Math.max(0.60, 1 - Math.max(Number(sensitivity) || 0.10, 0.16) * 2.2);
   const saturationThreshold = Math.min(0.40, 0.28 + (Number(sensitivity) || 0.10) * 0.4);
-  return ((lum >= threshold || lum <= sensitivity) && saturation <= saturationThreshold);
+  return lum >= threshold && saturation <= saturationThreshold;
 }
 
 function prEdgeBorderRatio(measured, rect, edge, offset, sensitivity) {
@@ -1287,13 +1357,19 @@ function prBuildSixGridCrop(source, img, node) {
   const rects = [];
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      const rect = {
-        x0: Math.round(xIntervals[col][0] * measured.scale),
-        x1: Math.round(xIntervals[col][1] * measured.scale),
-        y0: Math.round(yIntervals[row][0] * measured.scale),
-        y1: Math.round(yIntervals[row][1] * measured.scale),
+      const sourceRect = {
+        x0: xIntervals[col][0],
+        x1: xIntervals[col][1],
+        y0: yIntervals[row][0],
+        y1: yIntervals[row][1],
       };
-      const trimmed = prTrimRectBorderEdges(measured, rect, settings);
+      const measuredRect = {
+        x0: Math.round(sourceRect.x0 * measured.scale),
+        x1: Math.round(sourceRect.x1 * measured.scale),
+        y0: Math.round(sourceRect.y0 * measured.scale),
+        y1: Math.round(sourceRect.y1 * measured.scale),
+      };
+      const trimmed = prTrimRectBorderEdges(measured, measuredRect, settings);
       rects.push({
         x0: Math.round(trimmed.x0 / measured.scale),
         x1: Math.round(trimmed.x1 / measured.scale),
@@ -1331,9 +1407,7 @@ function prApplySixGridChineseLabels(node) {
     if (valueLabels) {
       if (!widget.options) widget.options = {};
       widget.options.values = Object.values(valueLabels);
-      if (Object.prototype.hasOwnProperty.call(valueLabels, widget.value)) {
-        widget.value = valueLabels[widget.value];
-      }
+      widget.value = prComboLabelFromValue(widget.name, widget.value);
     }
   }
   node.setDirtyCanvas?.(true, true);
@@ -1341,31 +1415,99 @@ function prApplySixGridChineseLabels(node) {
 
 function prRepairSixGridWidgetValues(node) {
   if (!prIsSixGridDirector(node)) return;
+  let changed = false;
 
   const epsilonWidget = prGetWidget(node, "epsilon");
   const epsilon = Number(epsilonWidget?.value);
   if (epsilonWidget && (!Number.isFinite(epsilon) || epsilon <= 0)) {
-    epsilonWidget.value = 0.001;
+    changed = prSetWidgetValue(epsilonWidget, 0.001) || changed;
   }
 
   const displayModeWidget = prGetWidget(node, "display_mode");
   if (displayModeWidget && !["seconds", "frames", ZH.seconds, ZH.frames].includes(displayModeWidget.value)) {
-    displayModeWidget.value = ZH.seconds;
+    changed = prSetWidgetValue(displayModeWidget, prComboLabelFromValue("display_mode", displayModeWidget.value)) || changed;
   }
 
   const guideStrengthWidget = prGetWidget(node, "guide_strength");
   if (guideStrengthWidget && (guideStrengthWidget.value === undefined || guideStrengthWidget.value === null || guideStrengthWidget.value === "")) {
-    guideStrengthWidget.value = "1.0";
+    changed = prSetWidgetValue(guideStrengthWidget, "1.0") || changed;
   }
 
   const transitionWidget = prGetWidget(node, "transition_smoothness");
   if (transitionWidget && (transitionWidget.value === undefined || transitionWidget.value === null)) {
-    transitionWidget.value = "";
+    changed = prSetWidgetValue(transitionWidget, "") || changed;
   }
 
   const gridLayoutWidget = prGetWidget(node, "grid_layout");
   if (gridLayoutWidget && !["auto", "2x3", "3x2", "\u81ea\u52a8\u68c0\u6d4b", "2\u5217 x 3\u884c", "3\u5217 x 2\u884c"].includes(gridLayoutWidget.value)) {
-    gridLayoutWidget.value = "\u81ea\u52a8\u68c0\u6d4b";
+    changed = prSetWidgetValue(gridLayoutWidget, prComboLabelFromValue("grid_layout", gridLayoutWidget.value)) || changed;
+  }
+
+  const parseModeWidget = prGetWidget(node, "parse_mode");
+  if (parseModeWidget) {
+    changed = prSetWidgetValue(parseModeWidget, prComboLabelFromValue("parse_mode", parseModeWidget.value)) || changed;
+  }
+
+  const customWidthWidget = prGetWidget(node, "custom_width");
+  if (customWidthWidget && !Number.isFinite(Number(customWidthWidget.value))) {
+    changed = prSetWidgetValue(customWidthWidget, 0) || changed;
+  }
+
+  const customHeightWidget = prGetWidget(node, "custom_height");
+  if (customHeightWidget && !Number.isFinite(Number(customHeightWidget.value))) {
+    changed = prSetWidgetValue(customHeightWidget, 0) || changed;
+  }
+
+  const borderSensitivityWidget = prGetWidget(node, "border_sensitivity");
+  const borderCropPxWidget = prGetWidget(node, "border_crop_px");
+  const rawSensitivity = Number(borderSensitivityWidget?.value);
+  const rawCropPx = Number(borderCropPxWidget?.value);
+  let repairedSensitivity = rawSensitivity;
+  let repairedCropPx = rawCropPx;
+
+  if (borderSensitivityWidget && Number.isFinite(rawSensitivity) && rawSensitivity > 1) {
+    if (!Number.isFinite(repairedCropPx)) repairedCropPx = rawSensitivity;
+    repairedSensitivity = DEFAULT_BORDER_SENSITIVITY;
+  }
+  if (!Number.isFinite(repairedSensitivity) || repairedSensitivity < 0.01 || repairedSensitivity > 0.45) {
+    repairedSensitivity = DEFAULT_BORDER_SENSITIVITY;
+  }
+  if (!Number.isFinite(repairedCropPx)) {
+    repairedCropPx = DEFAULT_BORDER_CROP_PX;
+  }
+  repairedCropPx = Math.max(0, Math.round(repairedCropPx));
+
+  if (borderSensitivityWidget) {
+    changed = prSetWidgetValue(borderSensitivityWidget, Number(repairedSensitivity.toFixed(4))) || changed;
+  }
+  if (borderCropPxWidget) {
+    changed = prSetWidgetValue(borderCropPxWidget, repairedCropPx) || changed;
+  }
+
+  const resizeMethodWidget = prGetWidget(node, "resize_method");
+  const resizeNumeric = Number(resizeMethodWidget?.value);
+  const divisibleByWidget = prGetWidget(node, "divisible_by");
+  if (resizeMethodWidget && Number.isFinite(resizeNumeric)) {
+    if (divisibleByWidget && (!Number.isFinite(Number(divisibleByWidget.value)) || Number(divisibleByWidget.value) <= 0)) {
+      changed = prSetWidgetValue(divisibleByWidget, Math.max(1, Math.round(resizeNumeric))) || changed;
+    }
+    changed = prSetWidgetValue(resizeMethodWidget, SIX_GRID_COMBO_VALUE_LABELS.resize_method["maintain aspect ratio"]) || changed;
+  } else if (resizeMethodWidget) {
+    changed = prSetWidgetValue(resizeMethodWidget, prComboLabelFromValue("resize_method", resizeMethodWidget.value)) || changed;
+  }
+
+  if (divisibleByWidget && (!Number.isFinite(Number(divisibleByWidget.value)) || Number(divisibleByWidget.value) <= 0)) {
+    changed = prSetWidgetValue(divisibleByWidget, 32) || changed;
+  }
+
+  const imgCompressionWidget = prGetWidget(node, "img_compression");
+  if (imgCompressionWidget && (imgCompressionWidget.value === undefined || imgCompressionWidget.value === null || imgCompressionWidget.value === "" || !Number.isFinite(Number(imgCompressionWidget.value)))) {
+    changed = prSetWidgetValue(imgCompressionWidget, 18) || changed;
+  }
+
+  if (changed) {
+    node.__dfSixGridWidgetsRepaired = true;
+    node.setDirtyCanvas?.(true, true);
   }
 }
 
@@ -1610,6 +1752,7 @@ function prSixGridSourceKey(source) {
   const layout = source.gridLayout || "auto";
   const detected = source.detectedLayout || "";
   const cropKey = [
+    SIX_GRID_CROP_ALGORITHM_VERSION,
     source.autoCropBorders ? "crop" : "nocrop",
     Number(source.borderSensitivity ?? 0.10).toFixed(3),
     Math.round(Number(source.borderCropPx ?? 0) || 0),
@@ -1734,6 +1877,7 @@ class TimelineEditor {
     this._sixGridPreviewSourceKey = "";
     this._sixGridPreviewLoad = null;
 
+    this.bindSixGridCropWidgetCallbacks();
     this.timeline = parseInitial(this.timelineDataWidget?.value);
     this.loadImages();
 
@@ -1743,6 +1887,10 @@ class TimelineEditor {
     }
     this.updateUIFromSelection();
     this.commitChanges(true);
+    if (prIsSixGridDirector(this.node) && this.node.__dfSixGridWidgetsRepaired) {
+      this.node.__dfSixGridWidgetsRepaired = false;
+      setTimeout(() => this.refreshSixGridPreviews(), 150);
+    }
     // Hide settings widgets by default to reduce node clutter.
     // Deferred so all widget types are finalized before we touch them.
     setTimeout(() => this.hideSettingsWidgets(), 0);
@@ -2766,7 +2914,37 @@ class TimelineEditor {
   sixGridInputKey(source = null, sourceKey = "") {
     source = source || prGetSixGridSource(this.node);
     sourceKey = sourceKey || prSixGridSourceKey(source);
-    return sourceKey || "";
+    return source?.url || sourceKey || "";
+  }
+
+  invalidateSixGridPreview() {
+    this._sixGridPreviewImage = null;
+    this._sixGridPreviewSource = null;
+    this._sixGridPreviewSourceKey = "";
+    this._sixGridPreviewLoad = null;
+    this._lastSixGridInputKey = "";
+  }
+
+  bindSixGridCropWidgetCallbacks() {
+    if (!prIsSixGridDirector(this.node)) return;
+    const watched = ["grid_layout", "auto_crop_borders", "border_sensitivity", "border_crop_px"];
+    for (const name of watched) {
+      const widget = prGetWidget(this.node, name);
+      if (!widget || widget.__dfSixGridCropCallbackWrapped) continue;
+      const originalCallback = widget.callback;
+      widget.callback = (...args) => {
+        const result = originalCallback?.apply(widget, args);
+        prRepairSixGridWidgetValues(this.node);
+        this.invalidateSixGridPreview();
+        const source = prGetSixGridSource(this.node);
+        const sourceKey = prSixGridSourceKey(source);
+        this.ensureSixGridPreviewImage(source, sourceKey);
+        this.refreshSixGridPreviews(source, sourceKey);
+        this.render();
+        return result;
+      };
+      widget.__dfSixGridCropCallbackWrapped = true;
+    }
   }
 
   requestSixGridAutoRefresh(reason = "input", source = null, sourceKey = "") {
@@ -2825,6 +3003,19 @@ class TimelineEditor {
         if (this._sixGridPreviewSourceKey === sourceKey) {
           const resolvedDims = prResolveGridDims(this.node, source, img);
           const resolvedSource = { ...source, ...resolvedDims };
+          const resolvedSourceKey = prSixGridSourceKey(resolvedSource);
+          if (resolvedSourceKey && resolvedSourceKey !== sourceKey) {
+            this._sixGridPreviewSourceKey = resolvedSourceKey;
+            for (const seg of this.timeline.segments || []) {
+              if (seg?.source === "storyboard_images") seg.storyboardPreviewKey = resolvedSourceKey;
+            }
+            if (this.timelineDataWidget) {
+              this.timelineDataWidget.value = JSON.stringify({
+                segments: this.timeline.segments.map(prSegmentForTimelineSave),
+                audioSegments: this.timeline.audioSegments.map(prSegmentForTimelineSave),
+              });
+            }
+          }
           resolvedSource.cropGrid = prBuildSixGridCrop(resolvedSource, img, this.node);
           this._sixGridPreviewImage = img;
           this._sixGridPreviewSource = resolvedSource;
@@ -5139,6 +5330,15 @@ class TimelineEditor {
       if (window.app && window.app.graph) window.app.graph.setDirtyCanvas(true, true);
     };
 
+    const refreshSixGridCropPreview = () => {
+      if (!prIsSixGridDirector(this.node)) return;
+      this.invalidateSixGridPreview();
+      const source = prGetSixGridSource(this.node);
+      const sourceKey = prSixGridSourceKey(source);
+      this.ensureSixGridPreviewImage(source, sourceKey);
+      this.refreshSixGridPreviews(source, sourceKey);
+    };
+
     // --- Display Mode ---
     const dmWidget = this.node.widgets?.find(w => w.name === "display_mode");
     if (dmWidget) {
@@ -5188,7 +5388,7 @@ class TimelineEditor {
     menu.appendChild(divider1);
 
     // Helper to create scrubbable number control with horizontal buttons
-    const createScrubbableNumberControl = (w, step, min, max, isFloat = false) => {
+    const createScrubbableNumberControl = (w, step, min, max, isFloat = false, onChange = null) => {
       const container = document.createElement("div");
       container.className = "pr-number-control";
 
@@ -5213,6 +5413,7 @@ class TimelineEditor {
         if (val < min) val = min;
         inp.value = isFloat ? val.toFixed(4) : Math.round(val);
         fireCallback(w, parseFloat(inp.value));
+        onChange?.();
       });
 
       incBtn.addEventListener("click", () => {
@@ -5220,6 +5421,7 @@ class TimelineEditor {
         if (val > max) val = max;
         inp.value = isFloat ? val.toFixed(4) : Math.round(val);
         fireCallback(w, parseFloat(inp.value));
+        onChange?.();
       });
 
       inp.addEventListener("change", () => {
@@ -5229,6 +5431,7 @@ class TimelineEditor {
         if (val > max) val = max;
         inp.value = isFloat ? val.toFixed(4) : Math.round(val);
         fireCallback(w, parseFloat(inp.value));
+        onChange?.();
       });
 
       // Dragging logic
@@ -5242,6 +5445,7 @@ class TimelineEditor {
       inp.addEventListener("mousedown", (e) => {
         startX = e.clientX;
         startVal = parseFloat(inp.value);
+        if (!Number.isFinite(startVal)) startVal = prFiniteNumber(w.value, min);
         hasMoved = false;
 
         const onMouseMove = (moveEvent) => {
@@ -5261,6 +5465,7 @@ class TimelineEditor {
 
             inp.value = isFloat ? newVal.toFixed(4) : Math.round(newVal);
             fireCallback(w, parseFloat(inp.value));
+            onChange?.();
           }
         };
 
@@ -5308,9 +5513,7 @@ class TimelineEditor {
       select.value = SIX_GRID_COMBO_VALUE_LABELS.grid_layout[current] || SIX_GRID_COMBO_VALUE_LABELS.grid_layout.auto;
       select.addEventListener("change", () => {
         fireCallback(gridLayoutWidget, select.value);
-        this._sixGridPreviewSourceKey = "";
-        this._lastSixGridInputKey = "";
-        this.requestSixGridAutoRefresh("layout");
+        refreshSixGridCropPreview();
         this.render();
       });
       menu.appendChild(this._makeSettingRow(ZH.gridLayout, select));
@@ -5325,7 +5528,7 @@ class TimelineEditor {
       cb.style.cursor = "pointer";
       cb.addEventListener("change", () => {
         fireCallback(autoCropWidget, cb.checked);
-        this._sixGridPreviewSourceKey = "";
+        refreshSixGridCropPreview();
         this.render();
       });
       menu.appendChild(this._makeSettingRow(ZH.autoCropBorders, cb));
@@ -5333,12 +5536,12 @@ class TimelineEditor {
 
     const borderSensitivityWidget = this.node.widgets?.find(w => w.name === "border_sensitivity");
     if (borderSensitivityWidget) {
-      menu.appendChild(this._makeSettingRow(ZH.borderSensitivity, createScrubbableNumberControl(borderSensitivityWidget, 0.01, 0.01, 0.45, true)));
+      menu.appendChild(this._makeSettingRow(ZH.borderSensitivity, createScrubbableNumberControl(borderSensitivityWidget, 0.01, 0.01, 0.45, true, refreshSixGridCropPreview)));
     }
 
     const borderCropPxWidget = this.node.widgets?.find(w => w.name === "border_crop_px");
     if (borderCropPxWidget) {
-      menu.appendChild(this._makeSettingRow(ZH.borderCropPx, createScrubbableNumberControl(borderCropPxWidget, 1, 0, 128, false)));
+      menu.appendChild(this._makeSettingRow(ZH.borderCropPx, createScrubbableNumberControl(borderCropPxWidget, 1, 0, 128, false, refreshSixGridCropPreview)));
     }
 
     // --- Divisible By ---
@@ -5660,8 +5863,8 @@ app.registerExtension({
       nodeType.prototype.onNodeCreated = function () {
         if (onNodeCreated) onNodeCreated.apply(this, arguments);
 
-        prApplySixGridChineseLabels(this);
         prRepairSixGridWidgetValues(this);
+        prApplySixGridChineseLabels(this);
 
         for (const [name, def] of APPENDED_WIDGET_DEFAULTS) {
           if (!this.widgets?.find(w => w.name === name)) {
@@ -5693,8 +5896,8 @@ app.registerExtension({
           }, 0);
         }
 
-        prApplySixGridChineseLabels(this);
         prRepairSixGridWidgetValues(this);
+        prApplySixGridChineseLabels(this);
 
         const container = document.createElement("div");
         configureFullWidthDomWidget(container);
@@ -5732,16 +5935,16 @@ app.registerExtension({
       const onConfigure = nodeType.prototype.onConfigure;
       nodeType.prototype.onConfigure = function (info) {
         const out = onConfigure?.apply(this, arguments);
-        prApplySixGridChineseLabels(this);
         prRepairSixGridWidgetValues(this);
+        prApplySixGridChineseLabels(this);
         for (const [name, def] of APPENDED_WIDGET_DEFAULTS) {
           const w = this.widgets.find(x => x.name === name);
           if (w && (w.value == null || w.value === "")) w.value = def;
         }
 
         setTimeout(() => {
-          prApplySixGridChineseLabels(this);
           prRepairSixGridWidgetValues(this);
+          prApplySixGridChineseLabels(this);
           if (this._timelineEditor) {
             this._timelineEditor.timeline = parseInitial(this._timelineEditor.timelineDataWidget?.value);
             this._timelineEditor.loadImages();
@@ -5751,6 +5954,11 @@ app.registerExtension({
               Math.max(-1, this._timelineEditor.timeline.segments.length - 1)
             );
             this._timelineEditor.updateUIFromSelection();
+            if (this.__dfSixGridWidgetsRepaired && prIsSixGridDirector(this)) {
+              this.__dfSixGridWidgetsRepaired = false;
+              this._timelineEditor.invalidateSixGridPreview();
+              this._timelineEditor.refreshSixGridPreviews();
+            }
             this._timelineEditor.render();
           }
         }, 0);

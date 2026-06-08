@@ -91,6 +91,15 @@ git clone https://github.com/Hu-Tao66/DF-WhatDreamsCost-ComfyUI.git
     - Restores cropped shots to the original cell size after border removal.
     - Uses independent `DF-LoadVideoUI` backend routes so this fork can coexist with the CS plugin.
 
+**v1.4.8**
+  * **Six-grid white-divider halo crop fix**
+    - Tightens the crop around detected internal divider bands so white lines and antialias glow are removed more reliably.
+    - Applies the same crop-boundary fix to both backend execution and the front-end director preview.
+    - Fixes front-end preview crop rectangles being scaled twice, which made the director timeline draw the wrong area.
+    - Repairs older workflows whose widget values shifted after new six-grid settings were added, such as `8.00 / NaN / 32` appearing in the crop settings.
+    - Refreshes six-grid previews whenever layout or border-crop settings change, without rebuilding the user's edited timeline.
+    - Makes the final edge trim target white/light-gray borders only, so dark image content is no longer treated as a border.
+
 **v1.4.7**
   * **Audio editing controls added to the DF director timeline**
     - Adds a toolbar and right-click action to split an audio segment at the playhead.
