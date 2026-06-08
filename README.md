@@ -91,6 +91,14 @@ git clone https://github.com/Hu-Tao66/DF-WhatDreamsCost-ComfyUI.git
     - Restores cropped shots to the original cell size after border removal.
     - Uses independent `DF-LoadVideoUI` backend routes so this fork can coexist with the CS plugin.
 
+**v1.4.7**
+  * **Audio editing controls added to the DF director timeline**
+    - Adds a toolbar and right-click action to split an audio segment at the playhead.
+    - Adds selected-clip duration editing in seconds for image/text/audio segments.
+    - Adds selected-audio `trim in` editing in seconds while preserving the source-audio length limit.
+    - Adds a quick action to fit the selected image/text segment to the overlapping audio clip.
+    - Keeps the existing `DF-LoadAudioUI` trim node and director audio-track output path unchanged.
+
 **v1.4.6**
   * **Manual duration alignment fix**
     - Manual `duration_seconds` / `duration_frames` edits now keep the user-entered total duration instead of being overwritten by timeline auto-sync.

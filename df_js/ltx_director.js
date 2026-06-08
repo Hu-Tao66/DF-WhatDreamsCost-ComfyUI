@@ -44,6 +44,10 @@ const ZH = {
   outputLength: "\u8f93\u51fa\u957f\u5ea6",
   trimIn: "\u88c1\u5165",
   trimOut: "\u88c1\u51fa",
+  duration: "\u65f6\u957f",
+  trimStart: "\u88c1\u5165",
+  splitAtPlayhead: "\u6309\u64ad\u653e\u5934\u5207\u5272",
+  fitToAudio: "\u8d34\u5408\u91cd\u53e0\u97f3\u9891",
   noPrompt: "(\u65e0\u63d0\u793a\u8bcd)",
   dropToPlace: "\u62d6\u653e\u5230\u6b64\u5904",
   dropAudio: "\u62d6\u653e\u97f3\u9891",
@@ -305,6 +309,50 @@ const STYLES = `
     display: none;
   }
   .pr-audio-info span { color: #fff; font-weight: 500; }
+  .pr-clip-edit-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .pr-clip-edit-label {
+    color: #aaa;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .pr-clip-edit-input {
+    width: 64px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid #111;
+    background: #242424;
+    color: #e0e0e0;
+    padding: 2px 6px;
+    font-size: 11px;
+    box-sizing: border-box;
+    outline: none;
+  }
+  .pr-clip-edit-input:focus {
+    border-color: #777;
+  }
+  .pr-clip-edit-btn {
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid #151515;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .pr-clip-edit-btn:hover:not(:disabled) {
+    background: #383838;
+  }
+  .pr-clip-edit-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
   .pr-controls-group {
     background: #1e1e1e;
     border: 1px solid #333;
@@ -715,6 +763,7 @@ const ICONS = {
   minus: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
   plus: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
   fit: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><polyline points="8 7 3 12 8 17"></polyline><polyline points="16 7 21 12 16 17"></polyline></svg>`,
+  scissors: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>`,
   gear: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`,
   close: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
 };
@@ -2083,6 +2132,12 @@ class TimelineEditor {
     deleteBtn.innerHTML = `${ICONS.trash} ${ZH.delete}`;
     deleteBtn.addEventListener("click", () => this.deleteSelectedSegment());
 
+    const splitAudioBtn = document.createElement("button");
+    splitAudioBtn.className = "pr-btn";
+    splitAudioBtn.innerHTML = `${ICONS.scissors} ${ZH.splitAtPlayhead}`;
+    splitAudioBtn.title = ZH.splitAtPlayhead;
+    splitAudioBtn.addEventListener("click", () => this.splitAudioSegmentAtFrame(this.currentFrame));
+
     actionGroup.appendChild(this.fileInput);
     actionGroup.appendChild(this.audioFileInput);
     actionGroup.appendChild(uploadBtn);
@@ -2092,6 +2147,7 @@ class TimelineEditor {
     }
     actionGroup.appendChild(addTextBtn);
     actionGroup.appendChild(uploadAudioBtn);
+    actionGroup.appendChild(splitAudioBtn);
     actionGroup.appendChild(deleteBtn);
     toolbar.appendChild(actionGroup);
 
@@ -2244,8 +2300,49 @@ class TimelineEditor {
     this.audioInfoArea = document.createElement("div");
     this.audioInfoArea.className = "pr-audio-info";
 
+    this.clipEditRow = document.createElement("div");
+    this.clipEditRow.className = "pr-clip-edit-row";
+
+    const durationEditLabel = document.createElement("span");
+    durationEditLabel.className = "pr-clip-edit-label";
+    durationEditLabel.textContent = `${ZH.duration}:`;
+    this.clipDurationInput = document.createElement("input");
+    this.clipDurationInput.type = "number";
+    this.clipDurationInput.step = "0.01";
+    this.clipDurationInput.min = "0";
+    this.clipDurationInput.className = "pr-clip-edit-input";
+    this.clipDurationInput.addEventListener("change", (e) => this.setSelectedSegmentDurationSeconds(e.target.value));
+
+    this.audioTrimStartLabel = document.createElement("span");
+    this.audioTrimStartLabel.className = "pr-clip-edit-label";
+    this.audioTrimStartLabel.textContent = `${ZH.trimStart}:`;
+    this.audioTrimStartInput = document.createElement("input");
+    this.audioTrimStartInput.type = "number";
+    this.audioTrimStartInput.step = "0.01";
+    this.audioTrimStartInput.min = "0";
+    this.audioTrimStartInput.className = "pr-clip-edit-input";
+    this.audioTrimStartInput.addEventListener("change", (e) => this.setSelectedAudioTrimStartSeconds(e.target.value));
+
+    this.splitSelectedAudioBtn = document.createElement("button");
+    this.splitSelectedAudioBtn.className = "pr-clip-edit-btn";
+    this.splitSelectedAudioBtn.innerHTML = `${ICONS.scissors} ${ZH.splitAtPlayhead}`;
+    this.splitSelectedAudioBtn.addEventListener("click", () => this.splitAudioSegmentAtFrame(this.currentFrame));
+
+    this.fitSelectedToAudioBtn = document.createElement("button");
+    this.fitSelectedToAudioBtn.className = "pr-clip-edit-btn";
+    this.fitSelectedToAudioBtn.textContent = ZH.fitToAudio;
+    this.fitSelectedToAudioBtn.addEventListener("click", () => this.fitImageSegmentToOverlappingAudio());
+
+    this.clipEditRow.appendChild(durationEditLabel);
+    this.clipEditRow.appendChild(this.clipDurationInput);
+    this.clipEditRow.appendChild(this.audioTrimStartLabel);
+    this.clipEditRow.appendChild(this.audioTrimStartInput);
+    this.clipEditRow.appendChild(this.splitSelectedAudioBtn);
+    this.clipEditRow.appendChild(this.fitSelectedToAudioBtn);
+
     propContainer.appendChild(this.promptInput);
     propContainer.appendChild(this.audioInfoArea);
+    propContainer.appendChild(this.clipEditRow);
 
     this.wrapper.addEventListener("dragover", (e) => {
       e.preventDefault();
@@ -3126,6 +3223,105 @@ class TimelineEditor {
     this.render();
   }
 
+  getSelectedSegment() {
+    if (this.selectedIndex < 0) return null;
+    return this.selectionType === "audio"
+      ? this.timeline.audioSegments[this.selectedIndex]
+      : this.timeline.segments[this.selectedIndex];
+  }
+
+  setSelectedSegmentDurationSeconds(rawValue) {
+    const seg = this.getSelectedSegment();
+    if (!seg) return;
+    let frames = Math.round((parseFloat(rawValue) || 0) * this.getFrameRate());
+    frames = Math.max(MIN_SEGMENT_LENGTH, frames);
+    if (this.selectionType === "audio") {
+      const available = Math.max(
+        MIN_SEGMENT_LENGTH,
+        Math.round((Number(seg.audioDurationFrames) || seg.length) - (Number(seg.trimStart) || 0)),
+      );
+      frames = Math.min(frames, available);
+    }
+    seg.length = frames;
+    this.updateUIFromSelection();
+    this.commitChanges(false, { syncDuration: true });
+    this.render();
+  }
+
+  setSelectedAudioTrimStartSeconds(rawValue) {
+    if (this.selectionType !== "audio") return;
+    const seg = this.getSelectedSegment();
+    if (!seg) return;
+    const sourceFrames = Math.max(1, Math.round(Number(seg.audioDurationFrames) || seg.length));
+    let trimStart = Math.round((parseFloat(rawValue) || 0) * this.getFrameRate());
+    trimStart = clamp(trimStart, 0, Math.max(0, sourceFrames - MIN_SEGMENT_LENGTH));
+    seg.trimStart = trimStart;
+    seg.length = Math.min(Math.max(MIN_SEGMENT_LENGTH, seg.length), Math.max(MIN_SEGMENT_LENGTH, sourceFrames - trimStart));
+    this.updateUIFromSelection();
+    this.commitChanges(false, { syncDuration: true });
+    this.render();
+  }
+
+  splitAudioSegmentAtFrame(frame = this.currentFrame) {
+    const splitFrame = Math.round(frame);
+    let idx = -1;
+    if (this.selectionType === "audio" && this.selectedIndex >= 0) {
+      const selected = this.timeline.audioSegments[this.selectedIndex];
+      if (selected && splitFrame > selected.start + MIN_SEGMENT_LENGTH && splitFrame < selected.start + selected.length - MIN_SEGMENT_LENGTH) {
+        idx = this.selectedIndex;
+      }
+    }
+    if (idx < 0) {
+      idx = this.timeline.audioSegments.findIndex(
+        (seg) => splitFrame > seg.start + MIN_SEGMENT_LENGTH && splitFrame < seg.start + seg.length - MIN_SEGMENT_LENGTH,
+      );
+    }
+    if (idx < 0) return false;
+
+    const seg = this.timeline.audioSegments[idx];
+    const leftLength = splitFrame - seg.start;
+    const rightLength = seg.start + seg.length - splitFrame;
+    const rightSeg = {
+      ...seg,
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+      start: splitFrame,
+      length: rightLength,
+      trimStart: (Number(seg.trimStart) || 0) + leftLength,
+    };
+    seg.length = leftLength;
+    this.timeline.audioSegments.splice(idx + 1, 0, rightSeg);
+    this.selectionType = "audio";
+    this.selectedIndex = idx + 1;
+    this.updateUIFromSelection();
+    this.commitChanges(false, { syncDuration: true });
+    this.render();
+    return true;
+  }
+
+  fitImageSegmentToOverlappingAudio(imageSeg = null) {
+    const seg = imageSeg || (this.selectionType === "image" ? this.getSelectedSegment() : null);
+    if (!seg) return false;
+    const imageCenter = seg.start + seg.length / 2;
+    let best = null;
+    let bestOverlap = 0;
+    for (const audio of this.timeline.audioSegments || []) {
+      const overlap = Math.min(seg.start + seg.length, audio.start + audio.length) - Math.max(seg.start, audio.start);
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        best = audio;
+      } else if (!best && imageCenter >= audio.start && imageCenter <= audio.start + audio.length) {
+        best = audio;
+      }
+    }
+    if (!best) return false;
+    seg.start = Math.max(0, Math.round(best.start));
+    seg.length = Math.max(MIN_SEGMENT_LENGTH, Math.round(best.length));
+    this.updateUIFromSelection();
+    this.commitChanges(false, { syncDuration: true });
+    this.render();
+    return true;
+  }
+
   formatTime(frames, dropSuffix = false) {
     const mode = prNormalizeDisplayMode(this.displayModeWidget?.value);
     if (mode === "seconds") {
@@ -3191,11 +3387,21 @@ class TimelineEditor {
       this.promptInput.style.display = "none";
       this.strengthRow.style.display = "flex";
       this.audioInfoArea.style.display = "block";
+      this.clipEditRow.style.display = "flex";
       this.audioInfoArea.innerHTML = `
         ${ZH.file}: <span>${seg.fileName || ZH.unknown}</span><br>
         ${ZH.length}: <span>${this.formatTime(seg.audioDurationFrames)}</span> ${ZH.outputLength}: <span>${this.formatTime(seg.length)}</span><br>
         ${ZH.trimIn}: <span>${this.formatTime(Math.round(seg.trimStart))}</span> ${ZH.trimOut}: <span>${this.formatTime(Math.round(seg.audioDurationFrames - (seg.trimStart + seg.length)))}</span>
       `;
+      this.clipDurationInput.value = (seg.length / this.getFrameRate()).toFixed(2);
+      this.clipDurationInput.disabled = false;
+      this.audioTrimStartLabel.style.display = "";
+      this.audioTrimStartInput.style.display = "";
+      this.audioTrimStartInput.value = ((Number(seg.trimStart) || 0) / this.getFrameRate()).toFixed(2);
+      this.audioTrimStartInput.disabled = false;
+      this.splitSelectedAudioBtn.style.display = "";
+      this.splitSelectedAudioBtn.disabled = false;
+      this.fitSelectedToAudioBtn.style.display = "none";
       this.strengthValue.value = "1.00";
       this.strengthValue.disabled = true;
       this.transitionValue.value = "0.00";
@@ -3206,6 +3412,16 @@ class TimelineEditor {
       this.strengthRow.style.display = "flex";
 
       if (seg) {
+        this.clipEditRow.style.display = "flex";
+        this.clipDurationInput.value = (seg.length / this.getFrameRate()).toFixed(2);
+        this.clipDurationInput.disabled = false;
+        this.audioTrimStartLabel.style.display = "none";
+        this.audioTrimStartInput.style.display = "none";
+        this.audioTrimStartInput.disabled = true;
+        this.splitSelectedAudioBtn.style.display = "none";
+        this.splitSelectedAudioBtn.disabled = true;
+        this.fitSelectedToAudioBtn.style.display = this.timeline.audioSegments.length ? "" : "none";
+        this.fitSelectedToAudioBtn.disabled = !this.timeline.audioSegments.length;
         this.promptInput.value = seg.prompt || "";
         this.promptInput.disabled = false;
 
@@ -3219,6 +3435,11 @@ class TimelineEditor {
       } else {
         this.promptInput.value = "";
         this.promptInput.disabled = true;
+        this.clipEditRow.style.display = "none";
+        this.clipDurationInput.disabled = true;
+        this.audioTrimStartInput.disabled = true;
+        this.splitSelectedAudioBtn.disabled = true;
+        this.fitSelectedToAudioBtn.disabled = true;
         this.strengthValue.value = "1.00";
         this.strengthValue.disabled = true;
         this.transitionValue.value = "0.00";
@@ -4577,6 +4798,30 @@ class TimelineEditor {
         this.dismissContextMenu();
       };
       menu.appendChild(copyPromptBtn);
+
+      if (this.timeline.audioSegments.length > 0) {
+        const fitAudioBtn = document.createElement("button");
+        fitAudioBtn.className = "pr-gap-menu-btn";
+        fitAudioBtn.innerHTML = ZH.fitToAudio;
+        fitAudioBtn.onclick = () => {
+          this.selectionType = "image";
+          this.selectedIndex = this.timeline.segments.findIndex(s => s.id === seg.id);
+          this.fitImageSegmentToOverlappingAudio(seg);
+          this.dismissContextMenu();
+        };
+        menu.appendChild(fitAudioBtn);
+      }
+    } else {
+      const splitBtn = document.createElement("button");
+      splitBtn.className = "pr-gap-menu-btn";
+      splitBtn.innerHTML = `${ICONS.scissors} ${ZH.splitAtPlayhead}`;
+      splitBtn.onclick = () => {
+        this.selectionType = "audio";
+        this.selectedIndex = this.timeline.audioSegments.findIndex(s => s.id === seg.id);
+        this.splitAudioSegmentAtFrame(this.currentFrame);
+        this.dismissContextMenu();
+      };
+      menu.appendChild(splitBtn);
     }
 
     const copySegBtn = document.createElement("button");
