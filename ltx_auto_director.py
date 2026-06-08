@@ -353,6 +353,18 @@ def _strengths_for_count(guide_strength: str, count: int):
     return values
 
 
+def _transitions_for_count(transition_smoothness: str, count: int):
+    values = [max(0.0, min(1.0, float(v))) for v in _parse_float_list(transition_smoothness)]
+    if not values:
+        return [0.0] * count
+    if len(values) == 1:
+        return [values[0]] * count
+    values = values[:count]
+    if len(values) < count:
+        values.extend([values[-1]] * (count - len(values)))
+    return values
+
+
 def _process_image_tensor(tensor, custom_width: int, custom_height: int, resize_method: str, divisible_by: int, img_compression: int):
     tensor = tensor[:1].detach().float().cpu()
     src_h, src_w = tensor.shape[1], tensor.shape[2]
@@ -442,6 +454,7 @@ class LTXAutoDirector(io.ComfyNode):
                 io.Float.Input("duration_seconds", display_name="\u603b\u79d2\u6570", default=5.0, min=0.1, max=1000.0, step=0.01, tooltip="Display helper; duration_frames is authoritative."),
                 io.String.Input("segment_lengths", display_name="\u6bcf\u6bb5\u5e27\u6570", default="", tooltip="Optional comma-separated frame lengths, e.g. 20,20,20,20,20,20."),
                 io.String.Input("guide_strength", display_name="\u56fe\u50cf\u5f15\u5bfc\u5f3a\u5ea6", default="1.0", tooltip="One strength for all shots, or comma-separated per-shot strengths."),
+                io.String.Input("transition_smoothness", display_name="\u8fc7\u6e21\u5e73\u6ed1\u5ea6", default="", optional=True, tooltip="One transition value for all shots, or comma-separated per-shot values. 0=hard cut, 1=smooth blend."),
                 io.Float.Input("epsilon", display_name="\u5206\u6bb5\u8fb9\u754c\u9510\u5ea6", default=0.001, min=0.0001, max=0.99, step=0.0001, tooltip="Prompt Relay boundary sharpness."),
                 io.Float.Input("frame_rate", display_name="\u5e27\u7387", default=24, min=1, max=240, step=1, tooltip="Frames per second."),
                 io.Combo.Input("parse_mode", display_name="\u6587\u672c\u89e3\u6790\u65b9\u5f0f", options=["auto", "json", "numbered_text"], default="auto", tooltip="How to parse llm_response."),
@@ -483,8 +496,8 @@ class LTXAutoDirector(io.ComfyNode):
     @classmethod
     def execute(cls, model, clip, storyboard_images, llm_response, global_prompt="",
                 segment_count=6, duration_frames=120, duration_seconds=5.0,
-                segment_lengths="", guide_strength="1.0", epsilon=1e-3, frame_rate=24,
-                parse_mode="auto", grid_layout="auto", auto_crop_borders=True,
+                segment_lengths="", guide_strength="1.0", transition_smoothness="", epsilon=1e-3,
+                frame_rate=24, parse_mode="auto", grid_layout="auto", auto_crop_borders=True,
                 border_sensitivity=0.10, border_crop_px=8, custom_width=0, custom_height=0,
                 resize_method="maintain aspect ratio", divisible_by=32, img_compression=18,
                 audio_vae=None, optional_latent=None) -> io.NodeOutput:
@@ -495,6 +508,7 @@ class LTXAutoDirector(io.ComfyNode):
         global_prompt = _to_str(global_prompt)
         segment_lengths = _to_str(segment_lengths)
         guide_strength = _to_str(guide_strength)
+        transition_smoothness = _to_str(transition_smoothness)
         segment_count = _to_int(segment_count, 6)
         duration_frames = _to_int(duration_frames, 120)
         frame_rate = _to_float(frame_rate, 24.0)
@@ -532,6 +546,7 @@ class LTXAutoDirector(io.ComfyNode):
 
         lengths = _normalize_lengths(segment_lengths, json_lengths, duration_frames, count, frame_rate)
         strengths = _strengths_for_count(guide_strength, count)
+        transitions = _transitions_for_count(transition_smoothness, count)
 
         guide_data = {"images": [], "insert_frames": [], "strengths": [], "frame_rate": frame_rate}
         timeline_segments = []
@@ -564,6 +579,7 @@ class LTXAutoDirector(io.ComfyNode):
                 "source": "storyboard_images",
                 "batch_index": idx,
                 "guideStrength": float(strengths[idx]),
+                "transitionSmoothness": float(transitions[idx]),
             })
             start += int(lengths[idx])
 
@@ -589,7 +605,14 @@ class LTXAutoDirector(io.ComfyNode):
             latent = optional_latent
 
         patched, conditioning = _encode_relay(
-            model, clip, latent, global_prompt or "", local_prompts, segment_lengths_out, float(epsilon),
+            model,
+            clip,
+            latent,
+            global_prompt or "",
+            local_prompts,
+            segment_lengths_out,
+            float(epsilon),
+            ",".join(f"{float(v):.2f}" for v in transitions),
         )
 
         audio_out = _build_combined_audio(timeline_data, ltxv_length, float(frame_rate))

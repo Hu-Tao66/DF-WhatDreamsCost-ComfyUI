@@ -10,7 +10,7 @@ const HANDLE_HIT_PX = 14;
 const MIN_SEGMENT_LENGTH = 6;
 const MAX_THUMBNAIL_DIM = 512; // Increased to maintain quality for taller images
 
-const HIDDEN_WIDGET_NAMES = ["timeline_data", "local_prompts", "segment_lengths", "guide_strength", "audio_data", "use_custom_audio"];
+const HIDDEN_WIDGET_NAMES = ["timeline_data", "local_prompts", "segment_lengths", "transition_smoothness", "guide_strength", "audio_data", "use_custom_audio"];
 
 const ZH = {
   addImage: "\u6dfb\u52a0\u56fe\u7247",
@@ -36,6 +36,7 @@ const ZH = {
   zoomIn: "\u653e\u5927",
   zoomFit: "\u9002\u914d\u6574\u6761\u65f6\u95f4\u7ebf",
   guideStrength: "\u5f15\u5bfc\u5f3a\u5ea6\uff1a",
+  transition: "\u8fc7\u6e21\uff1a",
   frameSuffix: " \u5e27",
   file: "\u6587\u4ef6",
   unknown: "\u672a\u77e5",
@@ -99,6 +100,7 @@ const SIX_GRID_INPUT_LABELS = {
   frame_rate: "\u5e27\u7387",
   display_mode: "\u65f6\u95f4\u663e\u793a",
   guide_strength: "\u56fe\u50cf\u5f15\u5bfc\u5f3a\u5ea6",
+  transition_smoothness: "\u8fc7\u6e21\u5e73\u6ed1\u5ea6",
   parse_mode: "\u6587\u672c\u89e3\u6790\u65b9\u5f0f",
   custom_width: "\u8f93\u51fa\u5bbd\u5ea6",
   custom_height: "\u8f93\u51fa\u9ad8\u5ea6",
@@ -156,7 +158,51 @@ function hideWidget(w) {
   if (w.element) w.element.style.display = "none";
 }
 
+function configureFullWidthDomWidget(element) {
+  if (!element?.style) return;
+  element.style.width = "100%";
+  element.style.minWidth = "0";
+  element.style.maxWidth = "100%";
+  element.style.boxSizing = "border-box";
+}
+
+function getFullWidthDomWidgetSize(node, height, legacyWidth) {
+  const nodeWidth = Number(node?.size?.[0]);
+  const fallbackWidth = Number(legacyWidth);
+  const width = Number.isFinite(fallbackWidth) && fallbackWidth > 0
+    ? fallbackWidth
+    : (Number.isFinite(nodeWidth) && nodeWidth > 0 ? nodeWidth : 0);
+  return [width, height];
+}
+
+function bindDomWidgetWidthToNode(widget, node) {
+  if (!widget || !node) return;
+  const descriptor = Object.getOwnPropertyDescriptor(widget, "width");
+  if (descriptor && !descriptor.configurable) return;
+  Object.defineProperty(widget, "width", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      const width = Number(node?.size?.[0]);
+      return Number.isFinite(width) && width > 0 ? width : undefined;
+    },
+    set() {
+      // Nodes 2.0's side panel writes its own narrow width here.
+    },
+  });
+}
+
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+function calculateTimelineDurationFrames(imageTextFrames, audioSegments = []) {
+  let furthestAudioEnd = 0;
+  for (const seg of audioSegments) {
+    const start = Number.isFinite(Number(seg?.start)) ? Number(seg.start) : 0;
+    const length = Number.isFinite(Number(seg?.length)) ? Number(seg.length) : 0;
+    furthestAudioEnd = Math.max(furthestAudioEnd, start + length);
+  }
+  return Math.max(1, Math.ceil(Number(imageTextFrames) || 0), Math.ceil(furthestAudioEnd));
+}
 
 // --- Modern Dark/Grey UI CSS (ComfyUI Match) ---
 const STYLES = `
@@ -1263,6 +1309,11 @@ function prRepairSixGridWidgetValues(node) {
     guideStrengthWidget.value = "1.0";
   }
 
+  const transitionWidget = prGetWidget(node, "transition_smoothness");
+  if (transitionWidget && (transitionWidget.value === undefined || transitionWidget.value === null)) {
+    transitionWidget.value = "";
+  }
+
   const gridLayoutWidget = prGetWidget(node, "grid_layout");
   if (gridLayoutWidget && !["auto", "2x3", "3x2", "\u81ea\u52a8\u68c0\u6d4b", "2\u5217 x 3\u884c", "3\u5217 x 2\u884c"].includes(gridLayoutWidget.value)) {
     gridLayoutWidget.value = "\u81ea\u52a8\u68c0\u6d4b";
@@ -1570,6 +1621,8 @@ class TimelineEditor {
     this.timeline = { segments: [], audioSegments: [] };
     this.selectionType = "image"; // "image" or "audio"
     this.selectedIndex = -1;
+    this._manualDurationOverride = false;
+    this._lastDurationFrames = 1;
 
     // Interactions
     this._isDragging = false;
@@ -1612,9 +1665,11 @@ class TimelineEditor {
     this.timelineDataWidget = this.node.widgets.find(w => w.name === "timeline_data");
     this.localPromptsWidget = this.node.widgets.find(w => w.name === "local_prompts");
     this.segmentLengthsWidget = this.node.widgets.find(w => w.name === "segment_lengths");
+    this.transitionSmoothnessWidget = this.node.widgets.find(w => w.name === "transition_smoothness");
     this.guideStrengthWidget = this.node.widgets.find(w => w.name === "guide_strength");
     this.displayModeWidget = this.node.widgets.find(w => w.name === "display_mode");
     this.llmResponseWidget = this.node.widgets.find(w => w.name === "llm_response");
+    this._lastDurationFrames = this.getDurationFrames();
     this._lastLLMResponse = this.getCurrentLLMText();
     this._lastLLMCheck = 0;
     this._lastSixGridSourceKey = "";
@@ -1648,7 +1703,9 @@ class TimelineEditor {
     const origDurationFramesCallback = this.durationFramesWidget?.callback;
     if (this.durationFramesWidget) {
       this.durationFramesWidget.callback = (...args) => {
+        const previousDurationFrames = this._lastDurationFrames || this.getDurationFrames();
         if (origDurationFramesCallback) origDurationFramesCallback.apply(this.durationFramesWidget, args);
+        this._manualDurationOverride = true;
 
         if (!isSyncing && this.durationSecondsWidget) {
           isSyncing = true;
@@ -1656,14 +1713,17 @@ class TimelineEditor {
           isSyncing = false;
         }
 
-        this.commitChanges();
+        this.alignTimelineToManualDuration(previousDurationFrames);
+        this.commitChanges(false, { syncDuration: false });
       };
     }
 
     const origDurationSecondsCallback = this.durationSecondsWidget?.callback;
     if (this.durationSecondsWidget) {
       this.durationSecondsWidget.callback = (...args) => {
+        const previousDurationFrames = this._lastDurationFrames || this.getDurationFrames();
         if (origDurationSecondsCallback) origDurationSecondsCallback.apply(this.durationSecondsWidget, args);
+        this._manualDurationOverride = true;
 
         if (!isSyncing && this.durationFramesWidget) {
           isSyncing = true;
@@ -1671,6 +1731,9 @@ class TimelineEditor {
           this.durationFramesWidget.value = newFrames;
           if (this.durationFramesWidget.callback) this.durationFramesWidget.callback(newFrames);
           isSyncing = false;
+        } else {
+          this.alignTimelineToManualDuration(previousDurationFrames);
+          this.commitChanges(false, { syncDuration: false });
         }
       };
     }
@@ -1775,22 +1838,94 @@ class TimelineEditor {
     return parseInt((this.frameRateWidget && this.frameRateWidget.value > 0) ? this.frameRateWidget.value : 24, 10);
   }
 
-  // Grow the timeline duration to fit `requiredFrames` if it is currently shorter.
-  // The timeline only ever grows — never shrinks — through this method.
-  growTimelineIfNeeded(requiredFrames) {
+  // Sync the output duration to the current furthest image/text/audio segment end.
+  syncTimelineDurationTo(requiredFrames) {
+    const newFrames = Math.max(1, Math.ceil(requiredFrames));
     const current = this.getDurationFrames();
-    if (requiredFrames <= current) return; // already big enough
+    this._manualDurationOverride = false;
+    if (newFrames === current) return;
 
-    const newFrames = Math.ceil(requiredFrames);
     if (this.durationFramesWidget) {
       this.durationFramesWidget.value = newFrames;
     }
     if (this.durationSecondsWidget) {
       this.durationSecondsWidget.value = parseFloat((newFrames / this.getFrameRate()).toFixed(3));
     }
+    this._lastDurationFrames = newFrames;
     // Notify ComfyUI that the widget value changed so it serialises correctly.
     if (window.app && window.app.graph) {
       window.app.graph.setDirtyCanvas(true, true);
+    }
+  }
+
+  getTrackEnd(segments = []) {
+    return (segments || []).reduce((furthest, seg) => {
+      const start = Number.isFinite(Number(seg?.start)) ? Number(seg.start) : 0;
+      const length = Number.isFinite(Number(seg?.length)) ? Number(seg.length) : 0;
+      return Math.max(furthest, start + length);
+    }, 0);
+  }
+
+  scaleTrackToDuration(segments = [], targetFrames, referenceFrames, options = {}) {
+    if (!segments.length) return false;
+    const target = Math.max(1, Math.round(Number(targetFrames) || 1));
+    const reference = Math.max(1, Math.round(Number(referenceFrames) || this.getTrackEnd(segments) || target));
+    const scale = target / reference;
+    const sorted = [...segments].sort((a, b) => (Number(a.start) || 0) - (Number(b.start) || 0));
+    let changed = false;
+
+    for (let i = 0; i < sorted.length; i++) {
+      const seg = sorted[i];
+      const oldStart = Math.max(0, Number(seg.start) || 0);
+      const oldLength = Math.max(1, Number(seg.length) || 1);
+      let newStart = Math.max(0, Math.round(oldStart * scale));
+      let newEnd = i === sorted.length - 1
+        ? target
+        : Math.max(newStart + 1, Math.round((oldStart + oldLength) * scale));
+
+      if (options.limitToAudioSource) {
+        const available = Math.max(
+          1,
+          Math.round((Number(seg.audioDurationFrames) || oldLength) - (Number(seg.trimStart) || 0)),
+        );
+        newEnd = Math.min(newEnd, newStart + available);
+      }
+
+      if (newStart >= target) newStart = Math.max(0, target - 1);
+      newEnd = Math.min(target, Math.max(newStart + 1, newEnd));
+
+      if (seg.start !== newStart || seg.length !== newEnd - newStart) {
+        seg.start = newStart;
+        seg.length = newEnd - newStart;
+        changed = true;
+      }
+    }
+
+    return changed;
+  }
+
+  alignTimelineToManualDuration(previousDurationFrames = null) {
+    const targetFrames = this.getDurationFrames();
+    const referenceFrames = Math.max(
+      1,
+      Math.round(Number(previousDurationFrames) || 0),
+      this.getTrackEnd(this.timeline.segments),
+      this.getTrackEnd(this.timeline.audioSegments),
+    );
+    let changed = false;
+
+    changed = this.scaleTrackToDuration(this.timeline.segments, targetFrames, referenceFrames) || changed;
+    changed = this.scaleTrackToDuration(
+      this.timeline.audioSegments,
+      targetFrames,
+      referenceFrames,
+      { limitToAudioSource: true },
+    ) || changed;
+
+    if (changed) {
+      this.timeline.segments.sort((a, b) => a.start - b.start);
+      this.timeline.audioSegments.sort((a, b) => a.start - b.start);
+      this.updateUIFromSelection();
     }
   }
 
@@ -2342,6 +2477,19 @@ class TimelineEditor {
     this.strengthValue.disabled = true;
     this.strengthValue.style.cursor = "ew-resize";
 
+    const transitionLabel = document.createElement("span");
+    transitionLabel.className = "pr-strength-label";
+    transitionLabel.style.marginLeft = "8px";
+    transitionLabel.textContent = ZH.transition;
+
+    this.transitionValue = document.createElement("input");
+    this.transitionValue.type = "text";
+    this.transitionValue.className = "pr-strength-input";
+    this.transitionValue.value = "0.00";
+    this.transitionValue.disabled = true;
+    this.transitionValue.title = "0.00 = hard cut, 1.00 = smooth blend";
+    this.transitionValue.style.cursor = "ew-resize";
+
     // Dragging logic for guide strength
     let isDragging = false;
     let startX = 0;
@@ -2410,10 +2558,67 @@ class TimelineEditor {
       }
     });
 
+    const setSelectedTransition = (rawValue) => {
+      let val = parseFloat(rawValue);
+      if (isNaN(val)) val = 0;
+      val = Math.max(0, Math.min(1, val));
+      this.transitionValue.value = val.toFixed(2);
+      if (this.selectionType === "image" && this.timeline.segments[this.selectedIndex]) {
+        const seg = this.timeline.segments[this.selectedIndex];
+        seg.transitionSmoothness = val;
+        this.commitChanges();
+      }
+    };
+
+    let isTransitionDragging = false;
+    let transitionStartX = 0;
+    let transitionStartVal = 0;
+    let transitionHasMoved = false;
+
+    this.transitionValue.addEventListener("mousedown", (e) => {
+      if (this.transitionValue.disabled) return;
+      transitionStartX = e.clientX;
+      transitionStartVal = parseFloat(this.transitionValue.value) || 0.0;
+      transitionHasMoved = false;
+
+      const onMouseMove = (moveEvent) => {
+        const deltaX = moveEvent.clientX - transitionStartX;
+        if (Math.abs(deltaX) > 3) {
+          transitionHasMoved = true;
+          isTransitionDragging = true;
+        }
+
+        if (isTransitionDragging) {
+          moveEvent.preventDefault();
+          setSelectedTransition(transitionStartVal + deltaX * 0.002);
+        }
+      };
+
+      const onMouseUp = () => {
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+
+        if (!transitionHasMoved) {
+          this.transitionValue.focus();
+          this.transitionValue.select();
+        }
+        isTransitionDragging = false;
+      };
+
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    });
+
+    this.transitionValue.addEventListener("change", (e) => {
+      setSelectedTransition(e.target.value);
+    });
+
     this.strengthRow.appendChild(this.timeCodeDisplay);
     this.strengthRow.appendChild(this.segmentBoundsDisplay);
     this.strengthRow.appendChild(strengthLabel);
     this.strengthRow.appendChild(this.strengthValue);
+    this.strengthRow.appendChild(transitionLabel);
+    this.strengthRow.appendChild(this.transitionValue);
 
 
     this.wrapper.appendChild(toolbar);
@@ -2649,7 +2854,8 @@ class TimelineEditor {
               prompt: "",
               type: "image",
               imageFile: imageFile,
-              imageB64: imgUrl
+              imageB64: imgUrl,
+              transitionSmoothness: 0.0,
             };
 
             const displayImg = new Image();
@@ -2666,7 +2872,7 @@ class TimelineEditor {
             this.selectedIndex = this.timeline.segments.findIndex(s => s.id === seg.id);
 
             this.updateUIFromSelection();
-            this.commitChanges(true);
+            this.commitChanges(true, { syncDuration: true });
           };
           img.src = imgUrl;
         } catch (err) {
@@ -2772,7 +2978,7 @@ class TimelineEditor {
           this.selectedIndex = this.timeline.audioSegments.findIndex(s => s.id === seg.id);
 
           this.updateUIFromSelection();
-          this.commitChanges(true);
+          this.commitChanges(true, { syncDuration: true });
           this.render();
           resolve();
         } catch (err) {
@@ -2818,6 +3024,7 @@ class TimelineEditor {
         source: "storyboard_images",
         batch_index: idx,
         guideStrength: 1.0,
+        transitionSmoothness: 0.0,
         storyboardPreviewKey: sourceKey,
       });
       cursor += length;
@@ -2827,7 +3034,7 @@ class TimelineEditor {
     this.selectedIndex = this.timeline.segments.length > 0 ? 0 : -1;
     this.loadImages();
     this.updateUIFromSelection();
-    this.commitChanges(true);
+    this.commitChanges(true, { syncDuration: true });
     this.render();
   }
 
@@ -2852,7 +3059,7 @@ class TimelineEditor {
         }
       }
       if (changed) {
-        this.commitChanges(true);
+        this.commitChanges(true, { syncDuration: true });
       }
       this.render();
       return changed;
@@ -2915,7 +3122,7 @@ class TimelineEditor {
       this.selectedIndex = Math.max(-1, this.selectedIndex - 1);
     }
     this.updateUIFromSelection();
-    this.commitChanges();
+    this.commitChanges(false, { syncDuration: true });
     this.render();
   }
 
@@ -2991,6 +3198,8 @@ class TimelineEditor {
       `;
       this.strengthValue.value = "1.00";
       this.strengthValue.disabled = true;
+      this.transitionValue.value = "0.00";
+      this.transitionValue.disabled = true;
     } else {
       this.audioInfoArea.style.display = "none";
       this.promptInput.style.display = "block";
@@ -3004,11 +3213,16 @@ class TimelineEditor {
         const strength = isImage ? (seg.guideStrength ?? 1.0) : 1.0;
         this.strengthValue.value = strength.toFixed(2);
         this.strengthValue.disabled = !isImage;
+        const transition = seg.transitionSmoothness ?? 0.0;
+        this.transitionValue.value = transition.toFixed(2);
+        this.transitionValue.disabled = false;
       } else {
         this.promptInput.value = "";
         this.promptInput.disabled = true;
         this.strengthValue.value = "1.00";
         this.strengthValue.disabled = true;
+        this.transitionValue.value = "0.00";
+        this.transitionValue.disabled = true;
       }
     }
 
@@ -4093,17 +4307,33 @@ class TimelineEditor {
       this._previewSegments = null;
       this._ghostTrack = null;
       this.canvas.style.cursor = "default";
-      this.commitChanges();
+      this.commitChanges(false, { syncDuration: true });
     }
   }
 
   // --- Backend Data Sync ---
-  commitChanges(skipRender = false) {
+  commitChanges(skipRender = false, options = {}) {
     let sortedSegments = [...this.timeline.segments].sort((a, b) => a.start - b.start);
     let contiguousLengths = [];
     let contiguousPrompts = [];
+    let contiguousTransitions = [];
     let currentCursor = 0;
-    const durationFrames = this.getDurationFrames();
+    let durationFrames = this.getDurationFrames();
+    const shouldSyncDuration = options.syncDuration === true
+      || (options.syncDuration !== false && !this._manualDurationOverride);
+    if (shouldSyncDuration) {
+      const imageTextFrames = sortedSegments.reduce(
+        (furthest, seg) => Math.max(furthest, Number(seg?.start || 0) + Number(seg?.length || 0)),
+        0,
+      );
+      const syncedDuration = calculateTimelineDurationFrames(imageTextFrames, this.timeline.audioSegments);
+      if (syncedDuration !== durationFrames) {
+        this.syncTimelineDurationTo(syncedDuration);
+        durationFrames = syncedDuration;
+      } else if (options.syncDuration === true) {
+        this._manualDurationOverride = false;
+      }
+    }
 
     // Build segment lengths clipped at the duration cutoff.
     // - Gaps before the first segment, or between segments, are absorbed into the adjacent
@@ -4131,6 +4361,7 @@ class TimelineEditor {
 
       contiguousLengths.push(clippedLength + pendingGap);
       contiguousPrompts.push(seg.prompt || "");
+      contiguousTransitions.push((seg.transitionSmoothness !== undefined ? seg.transitionSmoothness : 0.0).toFixed(2));
       pendingGap = 0;
       currentCursor = seg.start + seg.length; // advance by the real (unclipped) end for gap detection
     }
@@ -4155,6 +4386,9 @@ class TimelineEditor {
     if (this.segmentLengthsWidget) {
       this.segmentLengthsWidget.value = contiguousLengths.join(",");
     }
+    if (this.transitionSmoothnessWidget) {
+      this.transitionSmoothnessWidget.value = contiguousTransitions.join(",");
+    }
 
     if (this.guideStrengthWidget) {
       const imgStrengths = sortedSegments
@@ -4162,6 +4396,8 @@ class TimelineEditor {
         .map(s => (s.guideStrength !== undefined ? s.guideStrength : 1.0).toFixed(2));
       this.guideStrengthWidget.value = imgStrengths.join(",");
     }
+
+    this._lastDurationFrames = durationFrames;
 
     // Keep zoom slider max in sync with the current timeline duration.
     this.updateZoomSliderMax();
@@ -4368,7 +4604,7 @@ class TimelineEditor {
         const targetArray = currentTrack === "audio" ? this.timeline.audioSegments : this.timeline.segments;
         const idx = targetArray.findIndex(s => s.id === seg.id);
         if (idx >= 0) targetArray[idx] = newSeg;
-        this.commitChanges();
+        this.commitChanges(false, { syncDuration: true });
         this.dismissContextMenu();
       };
       menu.appendChild(pasteReplaceBtn);
@@ -4422,7 +4658,7 @@ class TimelineEditor {
         const targetArray = currentTrack === "audio" ? this.timeline.audioSegments : this.timeline.segments;
         targetArray.push(newSeg);
         targetArray.sort((a, b) => a.start - b.start);
-        this.commitChanges();
+        this.commitChanges(false, { syncDuration: true });
         this.dismissContextMenu();
       };
       menu.appendChild(pasteBtn);
@@ -4960,13 +5196,14 @@ class TimelineEditor {
       id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
       start: frameStart, length: frameEnd - frameStart,
       prompt: "", type,
+      transitionSmoothness: 0.0,
     };
     this.timeline.segments.push(seg);
     this.timeline.segments.sort((a, b) => a.start - b.start);
     this.selectionType = "image";
     this.selectedIndex = this.timeline.segments.findIndex(s => s.id === seg.id);
     this.updateUIFromSelection();
-    this.commitChanges();
+    this.commitChanges(false, { syncDuration: true });
   }
 
   addTextSegmentFreeSpace() {
@@ -4984,13 +5221,14 @@ class TimelineEditor {
       id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
       start: newStart, length: Math.min(newLength, Math.max(newLength, durationFrames - newStart)),
       prompt: "", type: "text",
+      transitionSmoothness: 0.0,
     };
     this.timeline.segments.push(seg);
     this.timeline.segments.sort((a, b) => a.start - b.start);
     this.selectionType = "image";
     this.selectedIndex = this.timeline.segments.findIndex(s => s.id === seg.id);
     this.updateUIFromSelection();
-    this.commitChanges();
+    this.commitChanges(false, { syncDuration: true });
   }
 
   // --- Audio Player Engine ---
@@ -5165,6 +5403,7 @@ const APPENDED_WIDGET_DEFAULTS = [
   ["timeline_data", "{}"],
   ["local_prompts", ""],
   ["segment_lengths", ""],
+  ["transition_smoothness", ""],
 ];
 
 app.registerExtension({
@@ -5213,17 +5452,20 @@ app.registerExtension({
         prRepairSixGridWidgetValues(this);
 
         const container = document.createElement("div");
+        configureFullWidthDomWidget(container);
+        const self = this;
         const widget = this.addDOMWidget("timeline_ui", "timeline_ui", container, {
           getValue: () => "",
           setValue: () => { },
         });
+        bindDomWidgetWidthToNode(widget, this);
+        configureFullWidthDomWidget(widget.element);
 
         widget.computeSize = function (width) {
           const canvasH = self._timelineEditor ? self._timelineEditor.canvasHeight : CANVAS_HEIGHT;
-          return [width, canvasH + 235];
+          return getFullWidthDomWidgetSize(self, canvasH + 235, width);
         };
 
-        const self = this;
         setTimeout(() => {
           try {
             self._timelineEditor = new TimelineEditor(self, container, widget);

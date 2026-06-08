@@ -4,6 +4,8 @@
 
 `DF-WhatDreamsCost-ComfyUI` 是基于 [yg496/CS-WhatDreamsCost-ComfyUI](https://github.com/yg496/CS-WhatDreamsCost-ComfyUI) 的二次 fork。CS 插件本身基于 [WhatDreamsCost/WhatDreamsCost-ComfyUI](https://github.com/WhatDreamsCost/WhatDreamsCost-ComfyUI)。本仓库保留上游作者署名和原有功能基础，只在独立 `DF-` 命名空间中注册节点，方便和原版、CS 版同时安装。
 
+导演台交互增强参考了 [yusu-02/Yusu-WhatDreamsCost-ComfyUI](https://github.com/yusu-02/Yusu-WhatDreamsCost-ComfyUI) 中值得借鉴的时间线宽度处理和过渡控制思路，并在 DF 命名空间内重新实现，避免和 CS/Yusu 节点冲突。
+
 ## 相比 CS 版新增了什么
 
 这个 DF fork 的主要目标是解决六宫格分镜图带白边、灰白边框或分隔线时，拆分后的单张分镜仍然残留边线的问题。
@@ -18,6 +20,7 @@
 - `DF-LTXAutoDirector` 也加入同一套逻辑：如果输入是一张合成六宫格图，会先自动裁白边并拆成 6 张；如果输入已经是批量分镜图，则保持 CS 原逻辑。
 - 所有公开节点保持 CS 原节点名称结构，只把 `CS-` 前缀改为 `DF-`，避免和 CS 插件冲突。
 - `DF-LoadVideoUI` 的后端接口使用独立 `/df_video_ui_*` 路由，避免和 CS 版同时安装时路由冲突。
+- 导演台增加每段 `Transition / 过渡` 控制，并修复总秒数/总帧数手动输入后的图片、音频时间线对齐。
 
 除了上面这些差异，其它节点功能基本保持 CS 版逻辑。
 
@@ -65,7 +68,7 @@
 2. 克隆本仓库：
 
 ```bash
-git clone https://github.com/your-name/DF-WhatDreamsCost-ComfyUI.git
+git clone https://github.com/Hu-Tao66/DF-WhatDreamsCost-ComfyUI.git
 ```
 
 3. 重启 ComfyUI。
@@ -87,6 +90,22 @@ git clone https://github.com/your-name/DF-WhatDreamsCost-ComfyUI.git
     - Supports automatic layout detection, `3列 x 2行`, and `2列 x 3行`.
     - Restores cropped shots to the original cell size after border removal.
     - Uses independent `DF-LoadVideoUI` backend routes so this fork can coexist with the CS plugin.
+
+**v1.4.6**
+  * **Manual duration alignment fix**
+    - Manual `duration_seconds` / `duration_frames` edits now keep the user-entered total duration instead of being overwritten by timeline auto-sync.
+    - Image/text segments are proportionally realigned to the new total duration, so six-grid storyboard blocks still fill the timeline.
+    - Audio segments are realigned with the new duration while staying capped by the available source audio length.
+    - Dragging image/text/audio segments still auto-syncs the total duration in both directions.
+
+**v1.4.5**
+  * **Yusu director improvements merged into the DF timeline**
+    - Adds per-segment `Transition` control to `DF-LTXDirector` and `DF-LTXSixGridDirector`.
+    - Passes `transition_smoothness` into Prompt Relay so shot boundaries can be softened without changing global `epsilon`.
+    - Lets `DF-LTXAutoDirector` accept one transition value for all shots or comma-separated per-shot values.
+    - Grows the timeline output duration when image/text/audio segments extend past the current duration.
+    - Applies the Yusu-style DOM widget width guard and removes the duplicated `DF-LTXDirectorGuide` frontend tail.
+    - Reference: [yusu-02/Yusu-WhatDreamsCost-ComfyUI](https://github.com/yusu-02/Yusu-WhatDreamsCost-ComfyUI).
 
 **v1.4.4**
   * **Six-grid source refresh fix**

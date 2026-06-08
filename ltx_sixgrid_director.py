@@ -20,6 +20,7 @@ from .ltx_auto_director import (
     _parse_prompts,
     _process_image_tensor,
     _strengths_for_count,
+    _transitions_for_count,
     _to_float,
     _to_int,
     _to_str,
@@ -400,7 +401,7 @@ def _split_single_six_grid_image(
 
 
 def _build_default_timeline(storyboard_images, llm_response, duration_frames, frame_rate,
-                            segment_lengths, guide_strength, parse_mode):
+                            segment_lengths, guide_strength, transition_smoothness, parse_mode):
     batch_count = int(storyboard_images.shape[0]) if storyboard_images is not None else 0
     prompts, json_lengths = _parse_prompts(llm_response, parse_mode)
     if batch_count == 1:
@@ -410,6 +411,7 @@ def _build_default_timeline(storyboard_images, llm_response, duration_frames, fr
     prompts = (prompts + [_fallback_prompt(i) for i in range(count)])[:count]
     lengths = _normalize_lengths(segment_lengths, json_lengths, duration_frames, count, frame_rate)
     strengths = _strengths_for_count(guide_strength, count)
+    transitions = _transitions_for_count(transition_smoothness, count)
 
     cursor = 0
     segments = []
@@ -423,6 +425,7 @@ def _build_default_timeline(storyboard_images, llm_response, duration_frames, fr
             "source": "storyboard_images",
             "batch_index": idx,
             "guideStrength": float(strengths[idx]),
+            "transitionSmoothness": float(transitions[idx]),
         })
         cursor += int(lengths[idx])
 
@@ -475,6 +478,7 @@ def _contiguous_prompts_and_lengths(segments, parsed_prompts, duration_frames):
     sorted_segments = sorted(segments, key=lambda seg: float(seg.get("start", 0)))
     prompts = []
     lengths = []
+    transitions = []
     current_cursor = 0
     pending_gap = 0
 
@@ -495,6 +499,7 @@ def _contiguous_prompts_and_lengths(segments, parsed_prompts, duration_frames):
         clipped_length = max(1, clipped_end - start)
         prompts.append(_prompt_for_segment(seg, idx, parsed_prompts))
         lengths.append(clipped_length + pending_gap)
+        transitions.append(max(0.0, min(1.0, _to_float(seg.get("transitionSmoothness"), 0.0))))
         pending_gap = 0
         current_cursor = start + length
 
@@ -505,8 +510,13 @@ def _contiguous_prompts_and_lengths(segments, parsed_prompts, duration_frames):
     if not prompts:
         prompts = [_fallback_prompt(0)]
         lengths = [duration_frames]
+        transitions = [0.0]
 
-    return " | ".join(prompts), ",".join(str(int(v)) for v in lengths)
+    return (
+        " | ".join(prompts),
+        ",".join(str(int(v)) for v in lengths),
+        ",".join(f"{float(v):.2f}" for v in transitions),
+    )
 
 
 def _load_segment_image(seg, storyboard_images, fallback_index, custom_width, custom_height,
@@ -622,6 +632,7 @@ class LTXSixGridDirector(io.ComfyNode):
                 io.Float.Input("frame_rate", display_name="\u5e27\u7387", default=24, min=1, max=240, step=1, optional=True),
                 io.String.Input("display_mode", display_name="\u65f6\u95f4\u663e\u793a", default="\u79d2", optional=True),
                 io.String.Input("guide_strength", display_name="\u56fe\u50cf\u5f15\u5bfc\u5f3a\u5ea6", default="1.0"),
+                io.String.Input("transition_smoothness", display_name="\u8fc7\u6e21\u5e73\u6ed1\u5ea6", default="", optional=True),
                 io.Combo.Input("parse_mode", display_name="\u6587\u672c\u89e3\u6790\u65b9\u5f0f", options=["\u81ea\u52a8", "JSON", "\u7f16\u53f7\u6587\u672c"], default="\u81ea\u52a8", optional=True),
                 io.Int.Input("custom_width", display_name="\u8f93\u51fa\u5bbd\u5ea6", default=0, min=0, max=8192, step=1, optional=True),
                 io.Int.Input("custom_height", display_name="\u8f93\u51fa\u9ad8\u5ea6", default=0, min=0, max=8192, step=1, optional=True),
@@ -658,8 +669,9 @@ class LTXSixGridDirector(io.ComfyNode):
 
     @classmethod
     def execute(cls, model, clip, global_prompt, duration_frames, duration_seconds,
-                timeline_data, local_prompts, segment_lengths, guide_strength="1.0", epsilon=1e-3,
-                frame_rate=24, display_mode="seconds", custom_width=0, custom_height=0,
+                timeline_data, local_prompts, segment_lengths, guide_strength="1.0",
+                transition_smoothness="", epsilon=1e-3, frame_rate=24,
+                display_mode="seconds", custom_width=0, custom_height=0,
                 grid_layout="auto", auto_crop_borders=True, border_sensitivity=0.10, border_crop_px=8,
                 resize_method="maintain aspect ratio", divisible_by=32, img_compression=18,
                 storyboard_images=None, llm_response="", audio_vae=None, optional_latent=None,
@@ -668,6 +680,7 @@ class LTXSixGridDirector(io.ComfyNode):
         global_prompt = _to_str(global_prompt)
         segment_lengths = _to_str(segment_lengths)
         guide_strength = _to_str(guide_strength)
+        transition_smoothness = _to_str(transition_smoothness)
         duration_frames = max(1, _to_int(duration_frames, 120))
         frame_rate = _to_float(frame_rate, 24.0)
         epsilon = _to_float(epsilon, 0.001)
@@ -693,11 +706,12 @@ class LTXSixGridDirector(io.ComfyNode):
                 frame_rate,
                 segment_lengths,
                 guide_strength,
+                transition_smoothness,
                 parse_mode,
             )
 
         timeline_json = json.dumps(timeline, ensure_ascii=False)
-        local_prompts, segment_lengths_out = _contiguous_prompts_and_lengths(
+        local_prompts, segment_lengths_out, transition_smoothness_out = _contiguous_prompts_and_lengths(
             timeline["segments"],
             parsed_prompts,
             duration_frames,
@@ -745,6 +759,7 @@ class LTXSixGridDirector(io.ComfyNode):
             local_prompts,
             segment_lengths_out,
             epsilon,
+            transition_smoothness_out,
         )
 
         audio_out = _build_combined_audio(timeline_json, ltxv_length, frame_rate)

@@ -11,7 +11,3 @@ app.registerExtension({
         // Nothing to initialize — the node has no configurable widgets.
     },
 });
-
-        // Nothing to initialize — the node has no configurable widgets.
-    },
-});

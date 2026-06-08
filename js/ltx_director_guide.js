@@ -5,13 +5,9 @@ import { app } from "../../scripts/app.js";
 // the guide_data output of Prompt Relay Encode (Timeline).
 // No dynamic widgets or sync logic needed.
 app.registerExtension({
-    name: "Comfy.CS-LTXDirectorGuide",
+    name: "Comfy.DF-LTXDirectorGuide",
     async nodeCreated(node) {
-        if (node.comfyClass !== "CS-LTXDirectorGuide") return;
-        // Nothing to initialize — the node has no configurable widgets.
-    },
-});
-
+        if (node.comfyClass !== "DF-LTXDirectorGuide") return;
         // Nothing to initialize — the node has no configurable widgets.
     },
 });

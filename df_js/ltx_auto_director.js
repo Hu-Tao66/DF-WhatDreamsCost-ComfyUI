@@ -20,6 +20,7 @@ const INPUT_LABELS = {
   duration_seconds: "\u603b\u79d2\u6570",
   segment_lengths: "\u6bcf\u6bb5\u5e27\u6570",
   guide_strength: "\u56fe\u50cf\u5f15\u5bfc\u5f3a\u5ea6",
+  transition_smoothness: "\u8fc7\u6e21\u5e73\u6ed1\u5ea6",
   epsilon: "\u5206\u6bb5\u8fb9\u754c\u9510\u5ea6",
   frame_rate: "\u5e27\u7387",
   parse_mode: "\u6587\u672c\u89e3\u6790\u65b9\u5f0f",
