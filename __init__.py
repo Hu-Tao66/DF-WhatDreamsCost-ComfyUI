@@ -6,7 +6,7 @@ from .load_audio_ui import LoadAudioUI
 from .load_video_ui import LoadVideoUI
 from .ltx_director import LTXDirector
 from .ltx_auto_director import LTXAutoDirector
-from .ltx_sixgrid_director import LTXSixGridDirector
+from .ltx_sixgrid_director import LTXGridDirector, LTXSixGridDirector
 from .ltx_director_guide import LTXDirectorGuide
 from comfy_api.latest import ComfyExtension, io
 from typing_extensions import override
@@ -20,6 +20,7 @@ class DFWhatDreamsCostExtension(ComfyExtension):
             LTXSequencer,
             LTXDirector,
             LTXAutoDirector,
+            LTXGridDirector,
             LTXSixGridDirector,
             LTXDirectorGuide,
         ]
@@ -38,6 +39,7 @@ NODE_CLASS_MAPPINGS = {
     "DF-LoadVideoUI": LoadVideoUI,
     "DF-LTXDirector": LTXDirector,
     "DF-LTXAutoDirector": LTXAutoDirector,
+    "DF-LTXGridDirector": LTXGridDirector,
     "DF-LTXSixGridDirector": LTXSixGridDirector,
     "DF-LTXDirectorGuide": LTXDirectorGuide,
 }
@@ -51,6 +53,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DF-LoadVideoUI": "DF Load Video UI",
     "DF-LTXDirector": "DF LTX Director",
     "DF-LTXAutoDirector": "DF LTX Auto Director",
+    "DF-LTXGridDirector": "DF-LTX \u5bab\u683c\u5bfc\u6f14\u53f0",
     "DF-LTXSixGridDirector": "DF-LTX \u516d\u5bab\u683c\u5bfc\u6f14\u53f0",
     "DF-LTXDirectorGuide": "DF LTX Director Guide",
 }

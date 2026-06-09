@@ -66,13 +66,63 @@ GRID_LAYOUT_ALIASES = {
     "3 columns x 2 rows": "3x2",
 }
 
+GRID_MODE_OPTIONS = ["2x2 \u56db\u5bab\u683c", "3x2 \u516d\u5bab\u683c", "3x3 \u4e5d\u5bab\u683c"]
+SHOT_ASPECT_OPTIONS = ["\u81ea\u52a8 / \u4fdd\u6301\u5355\u683c\u6bd4\u4f8b", "16:9 \u6a2a\u5c4f", "9:16 \u7ad6\u5c4f", "1:1 \u65b9\u56fe"]
+
+GRID_MODE_ALIASES = {
+    "2x2": (2, 2),
+    "2x2 \u56db\u5bab\u683c": (2, 2),
+    "\u56db\u5bab\u683c": (2, 2),
+    "4": (2, 2),
+    "3x2": (3, 2),
+    "2x3": (3, 2),
+    "3x2 \u516d\u5bab\u683c": (3, 2),
+    "2x3 \u516d\u5bab\u683c": (3, 2),
+    "\u516d\u5bab\u683c": (3, 2),
+    "6": (3, 2),
+    "3x3": (3, 3),
+    "3x3 \u4e5d\u5bab\u683c": (3, 3),
+    "\u4e5d\u5bab\u683c": (3, 3),
+    "9": (3, 3),
+}
+
+SHOT_ASPECT_ALIASES = {
+    "": None,
+    "auto": None,
+    "\u81ea\u52a8": None,
+    "\u81ea\u52a8 / \u4fdd\u6301\u5355\u683c\u6bd4\u4f8b": None,
+    "keep": None,
+    "16:9": 16 / 9,
+    "16:9 \u6a2a\u5c4f": 16 / 9,
+    "\u6a2a\u5c4f": 16 / 9,
+    "9:16": 9 / 16,
+    "9:16 \u7ad6\u5c4f": 9 / 16,
+    "\u7ad6\u5c4f": 9 / 16,
+    "1:1": 1.0,
+    "1:1 \u65b9\u56fe": 1.0,
+    "\u65b9\u56fe": 1.0,
+}
+
 DEFAULT_BORDER_SAFE_CROP_PX = 8
 MAX_BORDER_SAFE_CROP_PX = 48
 DEFAULT_BORDER_SENSITIVITY = 0.10
+GRID_MAX_SEGMENTS = 9
 
 
 def _normalize_choice(value, aliases, default):
     return aliases.get(_to_str(value).strip(), default)
+
+
+def _grid_dimensions(grid_mode):
+    return GRID_MODE_ALIASES.get(_to_str(grid_mode).strip(), (3, 2))
+
+
+def _shot_aspect_ratio(shot_aspect):
+    return SHOT_ASPECT_ALIASES.get(_to_str(shot_aspect).strip(), None)
+
+
+def _safe_crop_strength(value):
+    return max(0.0, min(5.0, _to_float(value, 1.0)))
 
 
 def _fallback_prompt(index: int) -> str:
@@ -314,6 +364,39 @@ def _resize_crop_to(tensor, target_h, target_w):
     return image.permute(0, 2, 3, 1).clamp(0.0, 1.0)
 
 
+def _crop_to_aspect_ratio(tensor, target_ratio):
+    if not target_ratio or target_ratio <= 0:
+        return tensor
+
+    height = int(tensor.shape[1])
+    width = int(tensor.shape[2])
+    if height <= 1 or width <= 1:
+        return tensor
+
+    current_ratio = width / height
+    if current_ratio > target_ratio:
+        target_w = max(1, int(round(height * target_ratio)))
+        return _center_crop_to(tensor, height, min(width, target_w))
+    if current_ratio < target_ratio:
+        target_h = max(1, int(round(width / target_ratio)))
+        return _center_crop_to(tensor, min(height, target_h), width)
+    return tensor
+
+
+def _target_cell_size(source_width, source_height, cols, rows, target_ratio=None):
+    cell_h = max(1, int(round(int(source_height) / max(1, int(rows)))))
+    cell_w = max(1, int(round(int(source_width) / max(1, int(cols)))))
+    if not target_ratio or target_ratio <= 0:
+        return cell_h, cell_w
+
+    current_ratio = cell_w / cell_h
+    if current_ratio > target_ratio:
+        cell_w = max(1, int(round(cell_h * target_ratio)))
+    elif current_ratio < target_ratio:
+        cell_h = max(1, int(round(cell_w / target_ratio)))
+    return cell_h, cell_w
+
+
 def _border_like_ratio(edge, sensitivity):
     edge = edge.detach().float().clamp(0.0, 1.0)
     max_channel = edge.max(dim=-1).values
@@ -385,6 +468,8 @@ def _split_single_six_grid_image(
     border_sensitivity=0.10,
     border_crop_px=8,
     grid_layout="auto",
+    target_ratio=None,
+    max_segments=MAX_AUTO_SEGMENTS,
 ):
     if storyboard_images is None or count <= 1:
         return storyboard_images
@@ -393,7 +478,11 @@ def _split_single_six_grid_image(
 
     _, height, width, _ = storyboard_images.shape
     border_sensitivity, border_crop_px = _repair_border_settings(border_sensitivity, border_crop_px)
-    cols, rows = _resolve_grid_layout(storyboard_images, grid_layout, border_sensitivity)
+    normalized_layout = _normalize_choice(grid_layout, GRID_LAYOUT_ALIASES, None)
+    if normalized_layout in {"auto", "2x3", "3x2"}:
+        cols, rows = _resolve_grid_layout(storyboard_images, normalized_layout, border_sensitivity)
+    else:
+        cols, rows = max(1, int(cols)), max(1, int(rows))
     crops = []
 
     if auto_crop_borders:
@@ -405,7 +494,8 @@ def _split_single_six_grid_image(
         x_intervals = [(col * cell_w, col * cell_w + cell_w) for col in range(cols)]
         y_intervals = [(row * cell_h, row * cell_h + cell_h) for row in range(rows)]
 
-    for idx in range(min(MAX_AUTO_SEGMENTS, count, cols * rows)):
+    max_segments = max(1, int(max_segments))
+    for idx in range(min(max_segments, count, cols * rows)):
         col = idx % cols
         row = idx // cols
         x0, x1 = x_intervals[col]
@@ -413,6 +503,7 @@ def _split_single_six_grid_image(
         crop = storyboard_images[:, y0:y1, x0:x1, :]
         if auto_crop_borders:
             crop = _trim_border_like_edges(crop, border_sensitivity, border_crop_px)
+        crop = _crop_to_aspect_ratio(crop, target_ratio)
         crops.append(crop)
 
     if not crops:
@@ -421,22 +512,28 @@ def _split_single_six_grid_image(
     if auto_crop_borders:
         min_h = min(int(crop.shape[1]) for crop in crops)
         min_w = min(int(crop.shape[2]) for crop in crops)
+        if target_ratio and target_ratio > 0:
+            if min_w / max(1, min_h) > target_ratio:
+                min_w = max(1, int(round(min_h * target_ratio)))
+            else:
+                min_h = max(1, int(round(min_w / target_ratio)))
         crops = [_center_crop_to(crop, min_h, min_w) for crop in crops]
-        target_h = max(1, int(round(int(height) / rows)))
-        target_w = max(1, int(round(int(width) / cols)))
+        target_h, target_w = _target_cell_size(width, height, cols, rows, target_ratio)
         crops = [_resize_crop_to(crop, target_h, target_w) for crop in crops]
 
     return torch.cat(crops, dim=0)
 
 
 def _build_default_timeline(storyboard_images, llm_response, duration_frames, frame_rate,
-                            segment_lengths, guide_strength, transition_smoothness, parse_mode):
+                            segment_lengths, guide_strength, transition_smoothness, parse_mode,
+                            grid_count=MAX_AUTO_SEGMENTS):
     batch_count = int(storyboard_images.shape[0]) if storyboard_images is not None else 0
     prompts, json_lengths = _parse_prompts(llm_response, parse_mode)
+    grid_count = max(1, min(GRID_MAX_SEGMENTS, int(grid_count)))
     if batch_count == 1:
-        count = min(MAX_AUTO_SEGMENTS, len(prompts) or MAX_AUTO_SEGMENTS)
+        count = min(grid_count, len(prompts) or grid_count)
     else:
-        count = max(1, min(MAX_AUTO_SEGMENTS, batch_count or MAX_AUTO_SEGMENTS))
+        count = max(1, min(grid_count, batch_count or grid_count))
     prompts = (prompts + [_fallback_prompt(i) for i in range(count)])[:count]
     lengths = _normalize_lengths(segment_lengths, json_lengths, duration_frames, count, frame_rate)
     strengths = _strengths_for_count(guide_strength, count)
@@ -579,13 +676,13 @@ def _build_guide_data(timeline, storyboard_images, duration_frames, frame_rate, 
                       custom_width, custom_height, resize_method, divisible_by, img_compression):
     guide_data = {"images": [], "insert_frames": [], "strengths": [], "frame_rate": frame_rate}
     derived_w, derived_h = custom_width, custom_height
-    strengths = _strengths_for_count(guide_strength, MAX_AUTO_SEGMENTS)
     image_segments = [
         seg for seg in timeline.get("segments", [])
         if seg.get("type", "image") == "image"
         and int(float(seg.get("start", 0))) < duration_frames
     ]
     image_segments.sort(key=lambda seg: float(seg.get("start", 0)))
+    strengths = _strengths_for_count(guide_strength, max(MAX_AUTO_SEGMENTS, len(image_segments)))
 
     for idx, seg in enumerate(image_segments):
         has_batch = storyboard_images is not None and (
@@ -628,6 +725,207 @@ def _build_guide_data(timeline, storyboard_images, duration_frames, frame_rate, 
         derived_w, derived_h = w, h
 
     return guide_data, derived_w, derived_h
+
+
+class LTXGridDirector(io.ComfyNode):
+    """DF grid director with 2x2/3x2/3x3 storyboard splitting."""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="DF-LTXGridDirector",
+            display_name="DF-LTX \u5bab\u683c\u5bfc\u6f14\u53f0",
+            category="DF-WhatDreamsCost",
+            description=(
+                "DF \u901a\u7528\u5bab\u683c\u5bfc\u6f14\u53f0\uff1a\u5728 CS \u65b0\u7248\u5bab\u683c\u5bfc\u6f14\u53f0\u57fa\u7840\u4e0a\u4fdd\u6301 DF \u547d\u540d\uff0c"
+                "\u652f\u6301 2x2 \u56db\u5bab\u683c\u30013x2 \u516d\u5bab\u683c\u548c 3x3 \u4e5d\u5bab\u683c\uff0c\u5e76\u4f7f\u7528 DF \u7684\u767d\u8fb9\u6846\u68c0\u6d4b\u88c1\u526a\u3002"
+            ),
+            inputs=[
+                io.Model.Input("model", display_name="\u6a21\u578b"),
+                io.Clip.Input("clip", display_name="\u6587\u672c\u7f16\u7801\u5668"),
+                io.Image.Input("storyboard_images", display_name="\u5bab\u683c\u56fe\u50cf", optional=True),
+                io.Combo.Input("grid_mode", display_name="\u5bab\u683c\u6a21\u5f0f", options=GRID_MODE_OPTIONS, default="3x2 \u516d\u5bab\u683c", optional=True),
+                io.Combo.Input("shot_aspect", display_name="\u5206\u955c\u6bd4\u4f8b", options=SHOT_ASPECT_OPTIONS, default="\u81ea\u52a8 / \u4fdd\u6301\u5355\u683c\u6bd4\u4f8b", optional=True),
+                io.Float.Input("border_crop", display_name="\u767d\u8fb9\u88c1\u526a\u5f3a\u5ea6", default=1.0, min=0.0, max=5.0, step=0.05, optional=True),
+                io.String.Input("llm_response", display_name="GPT \u5206\u955c\u6587\u672c", multiline=True, default=""),
+                io.Vae.Input("audio_vae", display_name="\u97f3\u9891 VAE", optional=True),
+                io.Latent.Input("optional_latent", display_name="\u53ef\u9009\u6f5c\u7a7a\u95f4", optional=True),
+                io.String.Input("global_prompt", display_name="\u5168\u5c40\u63d0\u793a\u8bcd", multiline=True, default=""),
+                io.Int.Input("duration_frames", display_name="\u603b\u5e27\u6570", default=120, min=1, max=10000, step=1),
+                io.Float.Input("duration_seconds", display_name="\u603b\u79d2\u6570", default=5.0, min=0.1, max=1000.0, step=0.01),
+                io.String.Input("timeline_data", display_name="\u65f6\u95f4\u7ebf\u6570\u636e", default=""),
+                io.Boolean.Input("use_custom_audio", display_name="\u4f7f\u7528\u81ea\u5b9a\u4e49\u97f3\u9891", default=False, optional=True),
+                io.String.Input("local_prompts", display_name="\u5206\u955c\u63d0\u793a\u8bcd", multiline=True, default=""),
+                io.String.Input("segment_lengths", display_name="\u6bcf\u6bb5\u5e27\u6570", default=""),
+                io.String.Input("epsilon", display_name="\u5206\u6bb5\u8fb9\u754c\u9510\u5ea6", default="0.001"),
+                io.Float.Input("frame_rate", display_name="\u5e27\u7387", default=24, min=1, max=240, step=1, optional=True),
+                io.String.Input("display_mode", display_name="\u65f6\u95f4\u663e\u793a", default="\u79d2", optional=True),
+                io.String.Input("guide_strength", display_name="\u56fe\u50cf\u5f15\u5bfc\u5f3a\u5ea6", default="1.0"),
+                io.String.Input("transition_smoothness", display_name="\u8fc7\u6e21\u5e73\u6ed1\u5ea6", default="", optional=True),
+                io.Combo.Input("parse_mode", display_name="\u6587\u672c\u89e3\u6790\u65b9\u5f0f", options=["\u81ea\u52a8", "JSON", "\u7f16\u53f7\u6587\u672c"], default="\u81ea\u52a8", optional=True),
+                io.Int.Input("custom_width", display_name="\u8f93\u51fa\u5bbd\u5ea6", default=0, min=0, max=8192, step=1, optional=True),
+                io.Int.Input("custom_height", display_name="\u8f93\u51fa\u9ad8\u5ea6", default=0, min=0, max=8192, step=1, optional=True),
+                io.Combo.Input(
+                    "resize_method",
+                    display_name="\u56fe\u50cf\u9002\u914d\u65b9\u5f0f",
+                    options=["\u4fdd\u6301\u6bd4\u4f8b", "\u62c9\u4f38\u586b\u6ee1", "\u7559\u767d\u586b\u5145", "\u88c1\u526a\u586b\u6ee1"],
+                    default="\u4fdd\u6301\u6bd4\u4f8b",
+                    optional=True,
+                ),
+                io.Int.Input("divisible_by", display_name="\u5c3a\u5bf8\u6574\u9664", default=32, min=1, max=256, step=1, optional=True),
+                io.Int.Input("img_compression", display_name="\u56fe\u50cf\u538b\u7f29", default=18, min=0, max=100, step=1, optional=True),
+            ],
+            outputs=[
+                io.Model.Output(display_name="\u6a21\u578b"),
+                io.Conditioning.Output(display_name="\u6b63\u5411\u6761\u4ef6"),
+                io.Latent.Output(display_name="\u89c6\u9891\u6f5c\u7a7a\u95f4"),
+                io.Latent.Output(display_name="\u97f3\u9891\u6f5c\u7a7a\u95f4"),
+                GuideData.Output(display_name="\u5f15\u5bfc\u6570\u636e"),
+                io.Float.Output(display_name="\u5e27\u7387"),
+                io.Audio.Output(display_name="\u5408\u6210\u97f3\u9891"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, model, clip, global_prompt, duration_frames, duration_seconds,
+                timeline_data, local_prompts, segment_lengths, guide_strength="1.0",
+                transition_smoothness="", epsilon=1e-3, frame_rate=24,
+                display_mode="seconds", custom_width=0, custom_height=0,
+                resize_method="maintain aspect ratio", divisible_by=32, img_compression=18,
+                storyboard_images=None, llm_response="", audio_vae=None, optional_latent=None,
+                use_custom_audio=False, parse_mode="auto", grid_mode="3x2 \u516d\u5bab\u683c",
+                shot_aspect="\u81ea\u52a8 / \u4fdd\u6301\u5355\u683c\u6bd4\u4f8b", border_crop=1.0) -> io.NodeOutput:
+        llm_response = _to_str(llm_response)
+        global_prompt = _to_str(global_prompt)
+        segment_lengths = _to_str(segment_lengths)
+        guide_strength = _to_str(guide_strength)
+        transition_smoothness = _to_str(transition_smoothness)
+        duration_frames = max(1, _to_int(duration_frames, 120))
+        frame_rate = _to_float(frame_rate, 24.0)
+        epsilon = _to_float(epsilon, 0.001)
+        custom_width = max(0, _to_int(custom_width, 0))
+        custom_height = max(0, _to_int(custom_height, 0))
+        divisible_by = max(1, _to_int(divisible_by, 32))
+        img_compression = max(0, _to_int(img_compression, 18))
+        parse_mode = _normalize_choice(parse_mode, PARSE_MODE_ALIASES, "auto")
+        resize_method = _normalize_choice(resize_method, RESIZE_METHOD_ALIASES, "maintain aspect ratio")
+        grid_cols, grid_rows = _grid_dimensions(grid_mode)
+        target_ratio = _shot_aspect_ratio(shot_aspect)
+        border_crop_strength = _safe_crop_strength(border_crop)
+        grid_count = min(GRID_MAX_SEGMENTS, grid_cols * grid_rows)
+
+        parsed_prompts, _ = _parse_prompts(llm_response, parse_mode)
+        timeline = _decode_timeline(timeline_data)
+
+        if not timeline["segments"] and storyboard_images is not None:
+            timeline = _build_default_timeline(
+                storyboard_images,
+                llm_response,
+                duration_frames,
+                frame_rate,
+                segment_lengths,
+                guide_strength,
+                transition_smoothness,
+                parse_mode,
+                grid_count=grid_count,
+            )
+
+        timeline_json = json.dumps(timeline, ensure_ascii=False)
+        local_prompts, segment_lengths_out, transition_smoothness_out = _contiguous_prompts_and_lengths(
+            timeline["segments"],
+            parsed_prompts,
+            duration_frames,
+        )
+
+        border_crop_px = 0
+        if storyboard_images is not None and int(storyboard_images.shape[0]) == 1:
+            _, source_h, source_w, _ = storyboard_images.shape
+            cell_size = min(int(source_w) / max(1, grid_cols), int(source_h) / max(1, grid_rows))
+            border_crop_px = int(round(cell_size * 0.015 * border_crop_strength))
+
+        storyboard_images_for_guides = _split_single_six_grid_image(
+            storyboard_images,
+            _image_segment_count(timeline),
+            cols=grid_cols,
+            rows=grid_rows,
+            auto_crop_borders=border_crop_strength > 0,
+            border_sensitivity=DEFAULT_BORDER_SENSITIVITY,
+            border_crop_px=border_crop_px,
+            grid_layout=None,
+            target_ratio=target_ratio,
+            max_segments=GRID_MAX_SEGMENTS,
+        )
+
+        guide_data, derived_w, derived_h = _build_guide_data(
+            timeline,
+            storyboard_images_for_guides,
+            duration_frames,
+            frame_rate,
+            guide_strength,
+            custom_width,
+            custom_height,
+            resize_method,
+            divisible_by,
+            img_compression,
+        )
+
+        ltxv_length = duration_frames + 1
+        if optional_latent is None:
+            latent_w = max(32, (int(derived_w) // 32) * 32)
+            latent_h = max(32, (int(derived_h) // 32) * 32)
+            latent_t = ((ltxv_length - 1) // 8) + 1
+            samples = torch.zeros(
+                [1, 128, latent_t, latent_h // 32, latent_w // 32],
+                device=comfy.model_management.intermediate_device(),
+            )
+            latent = {"samples": samples}
+        else:
+            latent = optional_latent
+
+        patched, conditioning = _encode_relay(
+            model,
+            clip,
+            latent,
+            global_prompt,
+            local_prompts,
+            segment_lengths_out,
+            epsilon,
+            transition_smoothness_out,
+        )
+
+        audio_out = _build_combined_audio(timeline_json, ltxv_length, frame_rate)
+        audio_latent = {}
+        if audio_vae is not None:
+            if use_custom_audio:
+                try:
+                    waveform = audio_out["waveform"]
+                    if waveform.ndim == 2:
+                        waveform = waveform.unsqueeze(0)
+                    if hasattr(audio_vae, "first_stage_model"):
+                        latent_samples = audio_vae.encode(waveform.movedim(1, -1))
+                    else:
+                        latent_samples = audio_vae.encode({
+                            "waveform": waveform,
+                            "sample_rate": audio_out["sample_rate"],
+                        })
+                    mask = torch.full(
+                        (1, latent_samples.shape[-2], latent_samples.shape[-1]),
+                        0.0,
+                        dtype=torch.float32,
+                        device=comfy.model_management.intermediate_device(),
+                    )
+                    audio_latent = {
+                        "samples": latent_samples,
+                        "type": "audio",
+                        "noise_mask": mask.reshape((-1, 1, mask.shape[-2], mask.shape[-1])),
+                    }
+                except Exception as exc:
+                    log.error("[LTX Grid Director] Failed to encode custom audio: %s", exc)
+                    raise exc
+            else:
+                audio_latent = _empty_audio_latent(audio_vae, ltxv_length, frame_rate)
+
+        return io.NodeOutput(patched, conditioning, latent, audio_latent, guide_data, frame_rate, audio_out)
 
 
 class LTXSixGridDirector(io.ComfyNode):
@@ -826,9 +1124,11 @@ class LTXSixGridDirector(io.ComfyNode):
 
 
 NODE_CLASS_MAPPINGS = {
+    "DF-LTXGridDirector": LTXGridDirector,
     "DF-LTXSixGridDirector": LTXSixGridDirector,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "DF-LTXGridDirector": "DF-LTX \u5bab\u683c\u5bfc\u6f14\u53f0",
     "DF-LTXSixGridDirector": "DF-LTX \u516d\u5bab\u683c\u5bfc\u6f14\u53f0",
 }

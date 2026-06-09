@@ -19,6 +19,8 @@ const ZH = {
   addImage: "\u6dfb\u52a0\u56fe\u7247",
   autoFill6: "\u81ea\u52a8\u586b\u5145 6 \u683c",
   autoFill6Title: "\u4ece\u5df2\u8fde\u63a5\u7684 2x3 \u516d\u5bab\u683c\u5206\u955c\u56fe\u521b\u5efa 6 \u4e2a\u53ef\u7f16\u8f91\u65f6\u95f4\u7ebf\u7247\u6bb5\u3002",
+  autoFillGrid: "\u81ea\u52a8\u586b\u5145\u5bab\u683c",
+  autoFillGridTitle: "\u4ece\u5df2\u8fde\u63a5\u7684\u5bab\u683c\u5206\u955c\u56fe\u521b\u5efa 4/6/9 \u4e2a\u53ef\u7f16\u8f91\u65f6\u95f4\u7ebf\u7247\u6bb5\u3002",
   syncText: "\u540c\u6b65\u6587\u672c",
   syncTextTitle: "\u5c06\u5df2\u8fd0\u884c\u7684 GPT response \u540c\u6b65\u5230 6 \u4e2a\u5206\u955c\u6587\u672c\uff0c\u4fdd\u7559\u624b\u52a8\u4fee\u6539\u3002",
   addAudio: "\u6dfb\u52a0\u97f3\u9891",
@@ -70,6 +72,9 @@ const ZH = {
   seconds: "\u79d2",
   displayMode: "\u65f6\u95f4\u663e\u793a",
   epsilon: "\u5206\u6bb5\u8fb9\u754c\u9510\u5ea6",
+  gridMode: "\u5bab\u683c\u6a21\u5f0f",
+  shotAspect: "\u5206\u955c\u6bd4\u4f8b",
+  borderCrop: "\u767d\u8fb9\u88c1\u526a\u5f3a\u5ea6",
   gridLayout: "\u516d\u5bab\u683c\u5e03\u5c40",
   autoCropBorders: "\u81ea\u52a8\u88c1\u6389\u516d\u5bab\u683c\u8fb9\u6846",
   borderSensitivity: "\u8fb9\u6846\u68c0\u6d4b\u7075\u654f\u5ea6",
@@ -93,6 +98,9 @@ const SIX_GRID_INPUT_LABELS = {
   model: "\u6a21\u578b",
   clip: "\u6587\u672c\u7f16\u7801\u5668",
   storyboard_images: "\u516d\u5bab\u683c\u62c6\u5206\u56fe",
+  grid_mode: "\u5bab\u683c\u6a21\u5f0f",
+  shot_aspect: "\u5206\u955c\u6bd4\u4f8b",
+  border_crop: "\u767d\u8fb9\u88c1\u526a\u5f3a\u5ea6",
   llm_response: "GPT \u5206\u955c\u6587\u672c",
   audio_vae: "\u97f3\u9891 VAE",
   optional_latent: "\u53ef\u9009\u6f5c\u7a7a\u95f4",
@@ -131,6 +139,32 @@ const SIX_GRID_OUTPUT_LABELS = {
 };
 
 const SIX_GRID_COMBO_VALUE_LABELS = {
+  grid_mode: {
+    "2x2": "2x2 \u56db\u5bab\u683c",
+    "2x2 \u56db\u5bab\u683c": "2x2 \u56db\u5bab\u683c",
+    "\u56db\u5bab\u683c": "2x2 \u56db\u5bab\u683c",
+    "3x2": "3x2 \u516d\u5bab\u683c",
+    "2x3": "3x2 \u516d\u5bab\u683c",
+    "3x2 \u516d\u5bab\u683c": "3x2 \u516d\u5bab\u683c",
+    "\u516d\u5bab\u683c": "3x2 \u516d\u5bab\u683c",
+    "3x3": "3x3 \u4e5d\u5bab\u683c",
+    "3x3 \u4e5d\u5bab\u683c": "3x3 \u4e5d\u5bab\u683c",
+    "\u4e5d\u5bab\u683c": "3x3 \u4e5d\u5bab\u683c",
+  },
+  shot_aspect: {
+    auto: "\u81ea\u52a8 / \u4fdd\u6301\u5355\u683c\u6bd4\u4f8b",
+    "\u81ea\u52a8": "\u81ea\u52a8 / \u4fdd\u6301\u5355\u683c\u6bd4\u4f8b",
+    "\u81ea\u52a8 / \u4fdd\u6301\u5355\u683c\u6bd4\u4f8b": "\u81ea\u52a8 / \u4fdd\u6301\u5355\u683c\u6bd4\u4f8b",
+    "16:9": "16:9 \u6a2a\u5c4f",
+    "16:9 \u6a2a\u5c4f": "16:9 \u6a2a\u5c4f",
+    "\u6a2a\u5c4f": "16:9 \u6a2a\u5c4f",
+    "9:16": "9:16 \u7ad6\u5c4f",
+    "9:16 \u7ad6\u5c4f": "9:16 \u7ad6\u5c4f",
+    "\u7ad6\u5c4f": "9:16 \u7ad6\u5c4f",
+    "1:1": "1:1 \u65b9\u56fe",
+    "1:1 \u65b9\u56fe": "1:1 \u65b9\u56fe",
+    "\u65b9\u56fe": "1:1 \u65b9\u56fe",
+  },
   display_mode: {
     seconds: ZH.seconds,
     frames: ZH.frames,
@@ -771,7 +805,7 @@ const ICONS = {
   close: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
 };
 
-const SIX_GRID_MAX_SEGMENTS = 6;
+const SIX_GRID_MAX_SEGMENTS = 9;
 
 function prGetWidget(node, name) {
   return node.widgets?.find((w) => w.name === name);
@@ -899,28 +933,44 @@ function prNormalizeImageWidgetValue(value) {
   return { filename: String(value), subfolder: "", type: "" };
 }
 
-const SIX_GRID_NODE_TYPES = ["DF-LTXSixGridDirector"];
+const SIX_GRID_NODE_TYPES = ["DF-LTXSixGridDirector", "DF-LTXGridDirector"];
 const LTX_DIRECTOR_NODE_TYPES = ["DF-LTXDirector"];
 
 function prIsSixGridDirector(node) {
   return SIX_GRID_NODE_TYPES.includes(node?.comfyClass) || SIX_GRID_NODE_TYPES.includes(node?.type);
 }
 
+function prIsGridModeDirector(node) {
+  return node?.comfyClass === "DF-LTXGridDirector" || node?.type === "DF-LTXGridDirector" || !!prGetWidget(node, "grid_mode");
+}
+
+function prNormalizeGridMode(value) {
+  const compact = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
+  if (compact.includes("2x2") || compact.includes("\u56db\u5bab\u683c") || compact === "4") return "2x2";
+  if (compact.includes("3x3") || compact.includes("\u4e5d\u5bab\u683c") || compact === "9") return "3x3";
+  return "3x2";
+}
+
 function prNormalizeGridLayout(value) {
   const compact = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
   if (!compact || compact.includes("auto") || compact.includes("\u81ea\u52a8")) return "auto";
+  if (compact === "2x2" || compact.includes("\u56db\u5bab\u683c")) return "2x2";
+  if (compact === "3x3" || compact.includes("\u4e5d\u5bab\u683c")) return "3x3";
   if (compact === "2x3" || compact.includes("2\u5217") || compact.includes("2columns")) return "2x3";
   if (compact === "3x2" || compact.includes("3\u5217") || compact.includes("3columns")) return "3x2";
   return "auto";
 }
 
 function prGridDimsForLayout(layout) {
+  if (layout === "2x2") return { cols: 2, rows: 2 };
   if (layout === "2x3") return { cols: 2, rows: 3 };
   if (layout === "3x2") return { cols: 3, rows: 2 };
+  if (layout === "3x3") return { cols: 3, rows: 3 };
   return null;
 }
 
 function prGetGridLayoutSetting(node) {
+  if (prGetWidget(node, "grid_mode")) return prNormalizeGridMode(prGetWidgetValue(node, "grid_mode", "3x2 \u516d\u5bab\u683c"));
   return prNormalizeGridLayout(prGetWidgetValue(node, "grid_layout", "auto"));
 }
 
@@ -990,11 +1040,47 @@ function prComboLabelFromValue(widgetName, value) {
   if (widgetName === "display_mode") return prDisplayModeValue(prNormalizeDisplayMode(value));
   if (widgetName === "parse_mode") return labels[prNormalizeParseMode(value)];
   if (widgetName === "resize_method") return labels[prNormalizeResizeMethod(value)];
+  if (widgetName === "grid_mode") return labels[prNormalizeGridMode(value)];
+  if (widgetName === "shot_aspect") return labels[prNormalizeShotAspect(value)];
   if (widgetName === "grid_layout") return labels[prNormalizeGridLayout(value)];
   return value;
 }
 
+function prNormalizeShotAspect(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (text.includes("16:9") || text.includes("\u6a2a\u5c4f")) return "16:9";
+  if (text.includes("9:16") || text.includes("\u7ad6\u5c4f")) return "9:16";
+  if (text.includes("1:1") || text.includes("\u65b9\u56fe")) return "1:1";
+  return "auto";
+}
+
+function prShotAspectRatioFromValue(value) {
+  const mode = prNormalizeShotAspect(value);
+  if (mode === "16:9") return 16 / 9;
+  if (mode === "9:16") return 9 / 16;
+  if (mode === "1:1") return 1;
+  return null;
+}
+
+function prGetShotCropOptions(node) {
+  const rawStrength = Number(prGetWidgetValue(node, "border_crop", 1.0));
+  return {
+    targetRatio: prShotAspectRatioFromValue(prGetWidgetValue(node, "shot_aspect", "")),
+    borderCropStrength: Math.max(0, Math.min(5, Number.isFinite(rawStrength) ? rawStrength : 1.0)),
+  };
+}
+
 function prGetBorderCropSettings(node) {
+  const borderCropWidget = prGetWidget(node, "border_crop");
+  if (borderCropWidget) {
+    const strength = prGetShotCropOptions(node).borderCropStrength;
+    return {
+      autoCropBorders: strength > 0,
+      borderSensitivity: DEFAULT_BORDER_SENSITIVITY,
+      borderCropPx: Math.max(0, Math.round(DEFAULT_BORDER_CROP_PX * strength)),
+      borderCropStrength: strength,
+    };
+  }
   return {
     autoCropBorders: prBoolWidgetValue(node, "auto_crop_borders", true),
     borderSensitivity: prClampNumber(prGetWidgetValue(node, "border_sensitivity", DEFAULT_BORDER_SENSITIVITY), 0.01, 0.45, DEFAULT_BORDER_SENSITIVITY),
@@ -1305,9 +1391,29 @@ function prTrimRectBorderEdges(measured, rect, settings) {
   return trimmed;
 }
 
+function prCropRectToAspect(rect, targetRatio) {
+  if (!targetRatio || targetRatio <= 0) return rect;
+  const width = Math.max(1, rect.x1 - rect.x0);
+  const height = Math.max(1, rect.y1 - rect.y0);
+  const currentRatio = width / height;
+  if (Math.abs(currentRatio - targetRatio) < 0.0001) return rect;
+
+  if (currentRatio > targetRatio) {
+    const newWidth = Math.max(1, Math.round(height * targetRatio));
+    const offset = Math.max(0, Math.floor((width - newWidth) / 2));
+    return { ...rect, x0: rect.x0 + offset, x1: rect.x0 + offset + newWidth };
+  }
+
+  const newHeight = Math.max(1, Math.round(width / targetRatio));
+  const offset = Math.max(0, Math.floor((height - newHeight) / 2));
+  return { ...rect, y0: rect.y0 + offset, y1: rect.y0 + offset + newHeight };
+}
+
 function prBuildSixGridCrop(source, img, node) {
   const cols = Math.max(1, Math.round(source?.cols || 3));
   const rows = Math.max(1, Math.round(source?.rows || 2));
+  const shotOptions = prGetShotCropOptions(node);
+  const targetRatio = source?.targetRatio ?? shotOptions.targetRatio;
   const settings = {
     autoCropBorders: source?.autoCropBorders ?? prGetBorderCropSettings(node).autoCropBorders,
     borderSensitivity: source?.borderSensitivity ?? prGetBorderCropSettings(node).borderSensitivity,
@@ -1327,10 +1433,12 @@ function prBuildSixGridCrop(source, img, node) {
       xIntervals,
       yIntervals,
       rects: yIntervals.flatMap((yInterval) => xIntervals.map((xInterval) => ({
-        x0: xInterval[0],
-        x1: xInterval[1],
-        y0: yInterval[0],
-        y1: yInterval[1],
+        ...prCropRectToAspect({
+          x0: xInterval[0],
+          x1: xInterval[1],
+          y0: yInterval[0],
+          y1: yInterval[1],
+        }, targetRatio),
       }))),
     };
   }
@@ -1369,7 +1477,7 @@ function prBuildSixGridCrop(source, img, node) {
         y0: Math.round(sourceRect.y0 * measured.scale),
         y1: Math.round(sourceRect.y1 * measured.scale),
       };
-      const trimmed = prTrimRectBorderEdges(measured, measuredRect, settings);
+      const trimmed = prCropRectToAspect(prTrimRectBorderEdges(measured, measuredRect, settings), targetRatio);
       rects.push({
         x0: Math.round(trimmed.x0 / measured.scale),
         x1: Math.round(trimmed.x1 / measured.scale),
@@ -1394,7 +1502,7 @@ function prSetLiteGraphLabel(item, label) {
 
 function prApplySixGridChineseLabels(node) {
   if (!prIsSixGridDirector(node)) return;
-  node.title = node.title || "DF-LTX \u516d\u5bab\u683c\u5bfc\u6f14\u53f0";
+  node.title = node.title || (prIsGridModeDirector(node) ? "DF-LTX \u5bab\u683c\u5bfc\u6f14\u53f0" : "DF-LTX \u516d\u5bab\u683c\u5bfc\u6f14\u53f0");
   for (const input of node.inputs || []) {
     prSetLiteGraphLabel(input, SIX_GRID_INPUT_LABELS[input.name]);
   }
@@ -1406,7 +1514,7 @@ function prApplySixGridChineseLabels(node) {
     const valueLabels = SIX_GRID_COMBO_VALUE_LABELS[widget.name];
     if (valueLabels) {
       if (!widget.options) widget.options = {};
-      widget.options.values = Object.values(valueLabels);
+      widget.options.values = Array.from(new Set(Object.values(valueLabels)));
       widget.value = prComboLabelFromValue(widget.name, widget.value);
     }
   }
@@ -1436,6 +1544,22 @@ function prRepairSixGridWidgetValues(node) {
   const transitionWidget = prGetWidget(node, "transition_smoothness");
   if (transitionWidget && (transitionWidget.value === undefined || transitionWidget.value === null)) {
     changed = prSetWidgetValue(transitionWidget, "") || changed;
+  }
+
+  const gridModeWidget = prGetWidget(node, "grid_mode");
+  if (gridModeWidget) {
+    changed = prSetWidgetValue(gridModeWidget, prComboLabelFromValue("grid_mode", gridModeWidget.value)) || changed;
+  }
+
+  const shotAspectWidget = prGetWidget(node, "shot_aspect");
+  if (shotAspectWidget) {
+    changed = prSetWidgetValue(shotAspectWidget, prComboLabelFromValue("shot_aspect", shotAspectWidget.value)) || changed;
+  }
+
+  const borderCropWidget = prGetWidget(node, "border_crop");
+  if (borderCropWidget) {
+    const repairedBorderCrop = prClampNumber(borderCropWidget.value, 0, 5, 1.0);
+    changed = prSetWidgetValue(borderCropWidget, Number(repairedBorderCrop.toFixed(4))) || changed;
   }
 
   const gridLayoutWidget = prGetWidget(node, "grid_layout");
@@ -1550,10 +1674,12 @@ function prGetSixGridSource(node) {
   if (!splitNode) return null;
   const nodeLayout = prGetGridLayoutSetting(node);
   const cropSettings = prGetBorderCropSettings(node);
+  const shotOptions = prGetShotCropOptions(node);
+  const sourceOptions = { ...cropSettings, targetRatio: shotOptions.targetRatio };
 
   if (prIsLoadImageNode(splitNode)) {
     const dims = prResolveGridDims(node, { cols: 3, rows: 2, gridLayout: nodeLayout }, null);
-    return { ...dims, ...cropSettings, url: prLoadImageUrl(splitNode) };
+    return { ...dims, ...sourceOptions, url: prLoadImageUrl(splitNode) };
   }
 
   let cols = Number(prGetWidgetValueAny(splitNode, ["\u6c34\u5e73\u5f20\u6570", "cols", "columns"], 1, NaN));
@@ -1563,10 +1689,10 @@ function prGetSixGridSource(node) {
   const dims = prResolveGridDims(node, { cols, rows, gridLayout: nodeLayout }, null);
 
   const imageLink = prGetGraphLink(splitNode.inputs?.[0]?.link);
-  if (!imageLink) return { ...dims, ...cropSettings, url: "" };
+  if (!imageLink) return { ...dims, ...sourceOptions, url: "" };
   const originId = imageLink.origin_id ?? imageLink.originId ?? imageLink[1];
   const imageNode = app.graph?.getNodeById?.(originId);
-  if (!imageNode) return { ...dims, ...cropSettings, url: "" };
+  if (!imageNode) return { ...dims, ...sourceOptions, url: "" };
 
   const url = prIsLoadImageNode(imageNode) ? prLoadImageUrl(imageNode) : "";
   if (!url) {
@@ -1578,7 +1704,7 @@ function prGetSixGridSource(node) {
       widgets_values: imageNode.widgets_values,
     });
   }
-  return { ...dims, ...cropSettings, url };
+  return { ...dims, ...sourceOptions, url };
 }
 
 function prStripFence(text) {
@@ -1756,6 +1882,8 @@ function prSixGridSourceKey(source) {
     source.autoCropBorders ? "crop" : "nocrop",
     Number(source.borderSensitivity ?? 0.10).toFixed(3),
     Math.round(Number(source.borderCropPx ?? 0) || 0),
+    Number(source.borderCropStrength ?? 0).toFixed(3),
+    Number(source.targetRatio ?? 0).toFixed(5),
   ].join(":");
   return `${layout}|${detected}|${source.cols || 3}x${source.rows || 2}|${cropKey}|${source.url}`;
 }
@@ -2255,8 +2383,8 @@ class TimelineEditor {
 
     const autoFillBtn = document.createElement("button");
     autoFillBtn.className = "pr-btn";
-    autoFillBtn.innerHTML = `${ICONS.upload} ${ZH.autoFill6}`;
-    autoFillBtn.title = ZH.autoFill6Title;
+    autoFillBtn.innerHTML = `${ICONS.upload} ${prIsGridModeDirector(this.node) ? ZH.autoFillGrid : ZH.autoFill6}`;
+    autoFillBtn.title = prIsGridModeDirector(this.node) ? ZH.autoFillGridTitle : ZH.autoFill6Title;
     autoFillBtn.addEventListener("click", () => this.autoFillFromSixGrid(false));
 
     const syncTextBtn = document.createElement("button");
@@ -2927,7 +3055,7 @@ class TimelineEditor {
 
   bindSixGridCropWidgetCallbacks() {
     if (!prIsSixGridDirector(this.node)) return;
-    const watched = ["grid_layout", "auto_crop_borders", "border_sensitivity", "border_crop_px"];
+    const watched = ["grid_mode", "shot_aspect", "border_crop", "grid_layout", "auto_crop_borders", "border_sensitivity", "border_crop_px"];
     for (const name of watched) {
       const widget = prGetWidget(this.node, name);
       if (!widget || widget.__dfSixGridCropCallbackWrapped) continue;
@@ -3289,7 +3417,9 @@ class TimelineEditor {
       return;
     }
 
-    const maxFromGrid = source ? Math.min(SIX_GRID_MAX_SEGMENTS, source.cols * source.rows) : SIX_GRID_MAX_SEGMENTS;
+    const fallbackDims = prGridDimsForLayout(prGetGridLayoutSetting(this.node)) || { cols: 3, rows: 2 };
+    const fallbackCount = Math.min(SIX_GRID_MAX_SEGMENTS, fallbackDims.cols * fallbackDims.rows);
+    const maxFromGrid = source ? Math.min(SIX_GRID_MAX_SEGMENTS, source.cols * source.rows) : fallbackCount;
     const count = Math.max(1, maxFromGrid);
     const lengths = prResolveSegmentLengths(this.node, count, ignoreManualLengths);
     const promptText = this.getCurrentLLMText();
@@ -5495,6 +5625,52 @@ class TimelineEditor {
     const epsWidget = this.node.widgets?.find(w => w.name === "epsilon");
     if (epsWidget) {
       menu.appendChild(this._makeSettingRow(ZH.epsilon, createScrubbableNumberControl(epsWidget, 0.0001, 0.0001, 0.99, true)));
+    }
+
+    // --- Grid Director Mode ---
+    const gridModeWidget = this.node.widgets?.find(w => w.name === "grid_mode");
+    if (gridModeWidget) {
+      const select = document.createElement("select");
+      select.className = "pr-settings-select";
+      const labels = Array.from(new Set(Object.values(SIX_GRID_COMBO_VALUE_LABELS.grid_mode)));
+      for (const label of labels) {
+        const option = document.createElement("option");
+        option.value = label;
+        option.textContent = label;
+        select.appendChild(option);
+      }
+      select.value = prComboLabelFromValue("grid_mode", gridModeWidget.value);
+      select.addEventListener("change", () => {
+        fireCallback(gridModeWidget, select.value);
+        refreshSixGridCropPreview();
+        this.render();
+      });
+      menu.appendChild(this._makeSettingRow(ZH.gridMode, select));
+    }
+
+    const shotAspectWidget = this.node.widgets?.find(w => w.name === "shot_aspect");
+    if (shotAspectWidget) {
+      const select = document.createElement("select");
+      select.className = "pr-settings-select";
+      const labels = Array.from(new Set(Object.values(SIX_GRID_COMBO_VALUE_LABELS.shot_aspect)));
+      for (const label of labels) {
+        const option = document.createElement("option");
+        option.value = label;
+        option.textContent = label;
+        select.appendChild(option);
+      }
+      select.value = prComboLabelFromValue("shot_aspect", shotAspectWidget.value);
+      select.addEventListener("change", () => {
+        fireCallback(shotAspectWidget, select.value);
+        refreshSixGridCropPreview();
+        this.render();
+      });
+      menu.appendChild(this._makeSettingRow(ZH.shotAspect, select));
+    }
+
+    const borderCropWidget = this.node.widgets?.find(w => w.name === "border_crop");
+    if (borderCropWidget) {
+      menu.appendChild(this._makeSettingRow(ZH.borderCrop, createScrubbableNumberControl(borderCropWidget, 0.05, 0, 5, true, refreshSixGridCropPreview)));
     }
 
     // --- Six-grid Layout ---

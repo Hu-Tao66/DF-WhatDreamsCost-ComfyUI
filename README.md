@@ -12,6 +12,9 @@
 
 新增和调整内容：
 
+- 跟进 CS 新版 `CS-LTXGridDirector`，新增独立 `DF-LTXGridDirector` / `DF-LTX 宫格导演台`。
+- `DF-LTXGridDirector` 支持 `2x2 四宫格`、`3x2 六宫格`、`3x3 九宫格`，并支持 `16:9`、`9:16`、`1:1` 分镜比例裁剪。
+- 新宫格导演台没有照搬 CS 的简单内缩裁剪，而是继续使用 DF 的白边/灰白边框检测裁剪，尽量只去掉边框和分隔线。
 - 在 `DF-LTXSixGridDirector` 中增加六宫格白边/灰白分隔线自动裁剪。
 - 支持 `3列 x 2行` 和 `2列 x 3行` 六宫格布局，也可以自动检测布局。
 - 增加 `自动裁掉六宫格边框`、`边框检测灵敏度`、`分隔线安全裁剪像素` 参数。
@@ -32,6 +35,7 @@
 | --- | --- |
 | `CS-LTXDirector` | `DF-LTXDirector` |
 | `CS-LTXAutoDirector` | `DF-LTXAutoDirector` |
+| `CS-LTXGridDirector` | `DF-LTXGridDirector` |
 | `CS-LTXSixGridDirector` | `DF-LTXSixGridDirector` |
 | `CS-LTXDirectorGuide` | `DF-LTXDirectorGuide` |
 | `CS-LTXKeyframer` | `DF-LTXKeyframer` |
@@ -41,7 +45,7 @@
 | `CS-LoadAudioUI` | `DF-LoadAudioUI` |
 | `CS-LoadVideoUI` | `DF-LoadVideoUI` |
 
-如果你从 CS 工作流迁移到 DF，需要把节点类型从 `CS-...` 替换成对应的 `DF-...`。其中六宫格节点是 `DF-LTXSixGridDirector`。
+如果你从 CS 工作流迁移到 DF，需要把节点类型从 `CS-...` 替换成对应的 `DF-...`。新版通用宫格节点是 `DF-LTXGridDirector`，旧六宫格兼容节点仍然是 `DF-LTXSixGridDirector`。
 
 ## ▶️ YouTube Tutorial Videos
 
@@ -81,6 +85,15 @@ git clone https://github.com/Hu-Tao66/DF-WhatDreamsCost-ComfyUI.git
 需要同时保持 ComfyUI-LTXVideo 和 ComfyUI-KJNodes 为较新版本。LTX 相关节点依赖这些插件的接口。
 
 # 更新记录
+
+**v1.4.9**
+  * **CS updated Grid Director ported into DF**
+    - Adds `DF-LTXGridDirector`, mirroring the upstream CS grid director naming structure with the `DF-` prefix.
+    - Supports 2x2, 3x2, and 3x3 storyboard grids, including nine-grid auto-fill in the DF timeline UI.
+    - Adds shot aspect options for automatic/keep, 16:9, 9:16, and 1:1 crops.
+    - Keeps DF's border-aware white/gray divider crop instead of reverting to CS's simple fixed inset.
+    - Preserves DF timeline/audio improvements, including transition control, manual duration alignment, and editable audio segments.
+    - Reference: [yg496/CS-WhatDreamsCost-ComfyUI](https://github.com/yg496/CS-WhatDreamsCost-ComfyUI) latest `CS-LTXGridDirector` update.
 
 **DF fork**
   * **Based on CS-WhatDreamsCost-ComfyUI, with border-aware six-grid splitting**
